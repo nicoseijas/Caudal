@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" role="img" aria-label="Caudal — bounded, observable async pipelines for .NET">
+  <defs>
+    <linearGradient id="stream" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0369a1" stop-opacity="0"/>
+      <stop offset="0.12" stop-color="#0369a1" stop-opacity="0.85"/>
+      <stop offset="0.88" stop-color="#0891b2" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <text x="360" y="78" text-anchor="middle" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="62" font-weight="600" letter-spacing="1" fill="#102a3a">Caudal</text>
+  <g stroke="url(#stream)" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M 150 98 C 320 98, 430 106, 570 107"/>
+    <path d="M 150 111 C 320 111, 430 111, 570 111"/>
+    <path d="M 150 124 C 320 124, 430 116, 570 115"/>
+  </g>
+  <text x="360" y="158" text-anchor="middle" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="16" letter-spacing="0.4" fill="#587585">Bounded, observable async pipelines for .NET</text>
+</svg>

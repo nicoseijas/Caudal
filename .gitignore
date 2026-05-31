@@ -1,0 +1,26 @@
+# Build results
+bin/
+obj/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+
+# Test and coverage results
+TestResults/
+coverage/
+*.trx
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Local working notes (not part of the public repo)
+INITIAL_DOC.md
