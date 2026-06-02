@@ -91,7 +91,7 @@ public enum FlowFailureMode
 }
 ```
 
-- **`Stop`** — the first exception cancels the rest of the pipeline: the source stops being read, in-flight work is cancelled, and the **original exception** (not a wrapper, not an aggregate) is rethrown at the terminal awaitable. If multiple workers fail concurrently, the first observed failure wins; the others are cancelled and their exceptions are not lost — they are available on the reported error but never override the primary one.
+- **`Stop`** — the first exception cancels the rest of the pipeline: the source stops being read, in-flight work is cancelled, and the **original exception** (not a wrapper, not an aggregate) is rethrown at the terminal awaitable. If multiple workers fail concurrently, the first observed failure wins; the others are cancelled and their exceptions are discarded once the primary failure is chosen. When every failure must be retained, `Capture` is the mode for that.
 - **`Skip`** — the failed item is discarded, the failure is reported (counted as `items.failed`, visible to diagnostics), and the pipeline continues. Skip is never the default.
 - **`Capture`** — the failure becomes data. The stage produces `IFlow<FlowResult<T>>`:
 

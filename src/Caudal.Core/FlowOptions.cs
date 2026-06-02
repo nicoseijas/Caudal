@@ -1,0 +1,23 @@
+namespace Caudal;
+
+/// <summary>Options governing a flow's source buffer.</summary>
+public sealed record FlowOptions
+{
+    /// <summary>
+    /// The bounded capacity of the stage buffer. When the buffer is full the
+    /// producer waits; no buffer in Caudal is unbounded. Must be at least 1.
+    /// </summary>
+    public int Capacity { get; init; } = 128;
+
+    /// <summary>The optional name of the pipeline, used for diagnostics.</summary>
+    public string? Name { get; init; }
+
+    internal void Validate()
+    {
+        if (Capacity < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(Capacity), Capacity, "Capacity must be at least 1.");
+        }
+    }
+}

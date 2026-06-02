@@ -1,0 +1,3 @@
+# Test-project relaxations. Test method names use underscores by convention.
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none
