@@ -4,21 +4,23 @@ using System.Threading.Channels;
 namespace Caudal.Internal;
 
 /// <summary>
-/// A concurrent async projection stage. Unordered mode uses a worker pool over a
+/// A concurrent async transformation stage. Unordered mode uses a worker pool over a
 /// shared input channel; ordered mode queues one task per item so results are
 /// delivered in source order while at most <c>Concurrency</c> items execute.
-/// In both modes the first failure completes the output channel with the original
+/// The selector returns a <see cref="StageResult{T}"/>, which lets filtering and
+/// failure policies decide per item whether anything is emitted. An exception that
+/// escapes the selector wrapper completes the output channel with the original
 /// exception and cancels the rest of the stage (Stop semantics).
 /// </summary>
 internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
 {
     private readonly FlowBase<TSource> _upstream;
-    private readonly Func<TSource, CancellationToken, Task<TResult>> _selector;
+    private readonly Func<TSource, CancellationToken, Task<StageResult<TResult>>> _selector;
     private readonly SelectAsyncOptions _selectOptions;
 
     internal SelectFlow(
         FlowBase<TSource> upstream,
-        Func<TSource, CancellationToken, Task<TResult>> selector,
+        Func<TSource, CancellationToken, Task<StageResult<TResult>>> selector,
         SelectAsyncOptions selectOptions)
         : base(upstream.Options)
     {
@@ -97,13 +99,19 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
             await foreach (var item in reader.ReadAllAsync(cts.Token).ConfigureAwait(false))
             {
                 var result = await _selector(item, cts.Token).ConfigureAwait(false);
-                await writer.WriteAsync(result, cts.Token).ConfigureAwait(false);
+                if (result.Emit)
+                {
+                    await writer.WriteAsync(result.Value!, cts.Token).ConfigureAwait(false);
+                }
             }
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)
         {
-            // The stage is already tearing down; cancellation is not a failure and
-            // must not race to become the pipeline's terminal exception.
+            // The stage is tearing down; its own cancellation is not a failure and
+            // must not race to become the pipeline's terminal exception. Matching on
+            // the exception's token (not the ambient flag) keeps a foreign
+            // OperationCanceledException — e.g. a selector's internal timeout —
+            // classified as an ordinary failure even mid-teardown.
             throw;
         }
         catch (Exception ex)
@@ -135,7 +143,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
     private async IAsyncEnumerable<TResult> EnumerateOrdered(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var tasks = Channel.CreateBounded<Task<TResult>>(new BoundedChannelOptions(Options.Capacity)
+        var tasks = Channel.CreateBounded<Task<StageResult<TResult>>>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
@@ -149,7 +157,11 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             await foreach (var task in tasks.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                yield return await task.ConfigureAwait(false);
+                var result = await task.ConfigureAwait(false);
+                if (result.Emit)
+                {
+                    yield return result.Value!;
+                }
             }
         }
         finally
@@ -168,11 +180,11 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
     }
 
     private async Task PumpOrderedAsync(
-        ChannelWriter<Task<TResult>> writer,
+        ChannelWriter<Task<StageResult<TResult>>> writer,
         SemaphoreSlim gate,
         CancellationToken cancellationToken)
     {
-        Task<TResult>? pending = null;
+        Task<StageResult<TResult>>? pending = null;
         try
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
@@ -197,7 +209,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         }
     }
 
-    private async Task<TResult> RunAsync(TSource item, SemaphoreSlim gate, CancellationToken cancellationToken)
+    private async Task<StageResult<TResult>> RunAsync(TSource item, SemaphoreSlim gate, CancellationToken cancellationToken)
     {
         try
         {

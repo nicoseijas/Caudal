@@ -16,6 +16,14 @@ public sealed record SelectAsyncOptions
     /// </summary>
     public bool PreserveOrder { get; init; }
 
+    /// <summary>
+    /// What happens when the selector throws. Defaults to
+    /// <see cref="FlowFailureMode.Stop"/>. <see cref="FlowFailureMode.Capture"/> is
+    /// not valid here — it changes the result type, so it is expressed through
+    /// <c>SelectResultAsync</c>.
+    /// </summary>
+    public FlowFailureMode FailureMode { get; init; } = FlowFailureMode.Stop;
+
     internal void Validate()
     {
         if (Concurrency < 1)
