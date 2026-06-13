@@ -106,7 +106,7 @@ This is the mode for batch work where successful results must survive individual
 
 Deliberately excluded: global error callbacks, static error events, aggregate exceptions as the primary error surface, and continue-on-any-error as a default.
 
-`OperationCanceledException` caused by the pipeline's own token is cancellation, not failure. It does not count as `items.failed` and is never retried.
+`OperationCanceledException` caused by the pipeline's own token is cancellation, not failure. It does not count as `items.failed` and is never retried. The classification is strict: the exception must carry the pipeline's token *and* that token must actually be cancelled. An `OperationCanceledException` that merely forwards the token while nothing was cancelled — or that comes from user code's internal timeout — is an ordinary failure.
 
 ### 3. How is the pipeline cancelled?
 

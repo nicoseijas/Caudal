@@ -190,6 +190,38 @@ public class FailureModeTests
     }
 
     [Fact]
+    public async Task Capture_captures_a_selectors_internal_timeout_as_a_failure()
+    {
+        // The selector derives its own linked token and cancels it — the classic
+        // per-item timeout. That OperationCanceledException does not belong to the
+        // pipeline and must be captured as this item's failure, never swallowed.
+        var results = await Enumerable.Range(0, 10)
+            .ToFlow(capacity: 8)
+            .SelectResultAsync(
+                async (i, ct) =>
+                {
+                    if (i == 5)
+                    {
+                        using var internalTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        internalTimeout.Cancel();
+                        await Task.Delay(Timeout.Infinite, internalTimeout.Token);
+                    }
+
+                    await Task.Yield();
+                    return i;
+                },
+                concurrency: 4,
+                preserveOrder: true)
+            .ToListAsync()
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        results.Should().HaveCount(10);
+        results[5].IsSuccess.Should().BeFalse();
+        results[5].Exception.Should().BeAssignableTo<OperationCanceledException>();
+        results.Where((r, i) => i != 5).Should().OnlyContain(r => r.IsSuccess);
+    }
+
+    [Fact]
     public async Task Concurrent_failures_under_skip_leave_no_running_work_behind()
     {
         var active = 0;

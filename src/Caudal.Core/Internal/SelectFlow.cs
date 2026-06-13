@@ -105,7 +105,8 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
                 }
             }
         }
-        catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)
+        catch (OperationCanceledException oce)
+            when (oce.CancellationToken == cts.Token && cts.Token.IsCancellationRequested)
         {
             // The stage is tearing down; its own cancellation is not a failure and
             // must not race to become the pipeline's terminal exception. Matching on

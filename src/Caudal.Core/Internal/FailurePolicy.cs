@@ -21,12 +21,15 @@ internal static class FailurePolicy
                 {
                     return StageResult<TResult>.From(await selector(item, ct).ConfigureAwait(false));
                 }
-                catch (OperationCanceledException oce) when (oce.CancellationToken == ct)
+                catch (OperationCanceledException oce)
+                    when (oce.CancellationToken == ct && ct.IsCancellationRequested)
                 {
-                    // Only cancellation produced by the pipeline's own token passes
-                    // through. Checking the ambient flag instead would misclassify a
-                    // selector's internal timeout as pipeline cancellation whenever
-                    // teardown happens to race with it, silently losing the failure.
+                    // Only cancellation genuinely produced by the pipeline's own token
+                    // passes through: the exception must carry that token AND the token
+                    // must actually be cancelled. The ambient flag alone would
+                    // misclassify a selector's internal timeout during a teardown race;
+                    // token identity alone would misclassify an exception that merely
+                    // forwards our token without any cancellation having happened.
                     throw;
                 }
                 catch
@@ -52,7 +55,8 @@ internal static class FailurePolicy
                 return StageResult<FlowResult<TResult>>.From(
                     FlowResult.Success(await selector(item, ct).ConfigureAwait(false)));
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException oce)
+                when (oce.CancellationToken == ct && ct.IsCancellationRequested)
             {
                 throw;
             }

@@ -8,4 +8,8 @@
     <Description>Bounded, observable async pipelines for .NET.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Caudal.Core.Tests" />
+  </ItemGroup>
+
 </Project>

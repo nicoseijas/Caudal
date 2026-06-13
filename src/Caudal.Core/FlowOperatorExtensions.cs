@@ -164,7 +164,8 @@ public static class FlowOperatorExtensions
             {
                 return await evaluate(item, ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException oce) when (oce.CancellationToken == ct)
+            catch (OperationCanceledException oce)
+                when (oce.CancellationToken == ct && ct.IsCancellationRequested)
             {
                 throw;
             }
