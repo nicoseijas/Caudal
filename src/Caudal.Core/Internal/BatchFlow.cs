@@ -39,12 +39,12 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
         });
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pump = PumpAsync(input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
 
         try
         {
             var reader = input.Reader;
-            var batch = new List<T>(_maximumSize);
+            var batch = NewBatch();
             long batchStart = 0;
 
             while (true)
@@ -63,7 +63,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                     if (batch.Count >= _maximumSize)
                     {
                         yield return batch;
-                        batch = new List<T>(_maximumSize);
+                        batch = NewBatch();
                     }
 
                     continue;
@@ -73,45 +73,23 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 if (remaining <= TimeSpan.Zero)
                 {
                     yield return batch;
-                    batch = new List<T>(_maximumSize);
+                    batch = NewBatch();
                     continue;
                 }
 
                 // Race the open batch's deadline against the next arrival.
-                bool timerWon;
-                bool hasMore = true;
-                using (var raceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-                {
-                    var waitTask = reader.WaitToReadAsync(raceCts.Token).AsTask();
-                    var timerTask = Task.Delay(remaining, _timeProvider, raceCts.Token);
-                    var winner = await Task.WhenAny(waitTask, timerTask).ConfigureAwait(false);
-                    raceCts.Cancel();
+                var outcome = await TimerRace
+                    .WaitToReadOrTimeoutAsync(reader, remaining, _timeProvider, cancellationToken)
+                    .ConfigureAwait(false);
 
-                    timerWon = winner == timerTask;
-                    if (timerWon)
-                    {
-                        // The loser was cancelled by raceCts; observe it. A channel
-                        // fault swallowed here resurfaces on the next WaitToReadAsync.
-                        await TaskHelpers.IgnoreErrorsAsync(waitTask).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await TaskHelpers.IgnoreErrorsAsync(timerTask).ConfigureAwait(false);
-
-                        // Completed before the cancel: rethrows the original channel
-                        // fault if the upstream failed.
-                        hasMore = await waitTask.ConfigureAwait(false);
-                    }
-                }
-
-                if (timerWon)
+                if (outcome == TimedWaitOutcome.TimerElapsed)
                 {
                     yield return batch;
-                    batch = new List<T>(_maximumSize);
+                    batch = NewBatch();
                     continue;
                 }
 
-                if (!hasMore)
+                if (outcome == TimedWaitOutcome.Completed)
                 {
                     yield return batch;
                     batch = [];
@@ -122,7 +100,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 if (batch.Count >= _maximumSize)
                 {
                     yield return batch;
-                    batch = new List<T>(_maximumSize);
+                    batch = NewBatch();
                 }
             }
 
@@ -138,6 +116,9 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
         }
     }
 
+    private List<T> NewBatch()
+        => new(Math.Min(_maximumSize, 512));
+
     private void Drain(ChannelReader<T> reader, List<T> batch)
     {
         while (batch.Count < _maximumSize && reader.TryRead(out var item))
@@ -146,20 +127,4 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
         }
     }
 
-    private async Task PumpAsync(ChannelWriter<T> writer, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
-            {
-                await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
-            }
-
-            writer.Complete();
-        }
-        catch (Exception ex)
-        {
-            writer.TryComplete(ex);
-        }
-    }
 }

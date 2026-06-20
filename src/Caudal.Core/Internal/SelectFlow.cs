@@ -48,7 +48,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        var pump = PumpAsync(input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
         var workers = new Task[_selectOptions.Concurrency];
         for (var i = 0; i < workers.Length; i++)
         {
@@ -69,23 +69,6 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
             cts.Cancel();
             await TaskHelpers.IgnoreErrorsAsync(pump).ConfigureAwait(false);
             await TaskHelpers.IgnoreErrorsAsync(completion).ConfigureAwait(false);
-        }
-    }
-
-    private async Task PumpAsync(ChannelWriter<TSource> writer, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
-            {
-                await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
-            }
-
-            writer.Complete();
-        }
-        catch (Exception ex)
-        {
-            writer.TryComplete(ex);
         }
     }
 
