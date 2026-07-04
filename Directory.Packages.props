@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <PackageVersion Include="Polly.Core" Version="8.4.2" />
+    <PackageVersion Include="System.Threading.RateLimiting" Version="8.0.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Caudal.Core\Caudal.Core.csproj" />
+    <ProjectReference Include="..\..\src\Caudal.RateLimiting\Caudal.RateLimiting.csproj" />
+    <ProjectReference Include="..\..\src\Caudal.Resilience\Caudal.Resilience.csproj" />
   </ItemGroup>
 
 </Project>

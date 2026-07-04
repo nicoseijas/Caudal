@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Caudal.Core\Caudal.Core.csproj" />
+    <ProjectReference Include="..\..\src\Caudal.Resilience\Caudal.Resilience.csproj" />
+    <ProjectReference Include="..\..\src\Caudal.RateLimiting\Caudal.RateLimiting.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -13,7 +13,7 @@ Status: draft. These contracts freeze at `1.0`; until then, changes are allowed 
 5. **An exception cannot disappear silently.** Every failure either terminates the pipeline, is reported, or becomes data — per the stage's failure mode.
 6. **A pipeline has a single lifecycle.** One start, one terminal state, one owner.
 7. **Completing means waiting for or cancelling all internal work.** When the terminal awaitable finishes, no pipeline task is still running.
-8. **Retries must not hold capacity unnecessarily.** A worker slot is released while a retry waits out its delay.
+8. **Retries must not hold capacity unnecessarily.** The goal is to release a worker slot while a retry waits out its delay; see *Time, queues, and retries* for the 0.x status of this principle.
 9. **Telemetry never changes semantics.** Enabling or disabling diagnostics must not alter ordering, timing contracts, or error behavior — only cost.
 10. **Every operator documents its behavior under saturation.** "What happens when this stage is full" is part of each operator's public contract, not an implementation detail.
 
@@ -160,7 +160,7 @@ These decisions bind Phase 4 (time operators) and Phase 5 (resilience):
 
 - **Queue time and execution time are measured separately** (`queue.duration` vs `processing.duration`). A "slow" item that spent 4.9 s in a queue and 100 ms executing is a capacity problem, not a latency problem, and the metrics must be able to say which.
 - **`TimeoutEach` applies to execution only.** Time spent waiting in a queue does not count against an item's timeout.
-- **A retry releases its worker slot during its delay.** Waiting out a backoff must not block capacity that other items could use.
+- **A retry releasing its worker slot during its delay remains the design goal (principle 8).** In 0.x, the resilience integration executes the whole Polly `ResiliencePipeline` — including every retry attempt and the delay between them — inside the item's worker slot, so a backoff currently *does* hold capacity that other items could otherwise use. Releasing the slot during a wait would require Caudal to own the retry loop itself (re-queueing an item with its attempt state and resuming it later), which contradicts "Caudal integrates resilience; it does not reimplement Polly." This gap is documented in [`docs/resilience.md`](resilience.md) and will be revisited before `1.0`.
 - **Pipeline cancellation is distinguishable from timeout.** An item cancelled because the pipeline is shutting down is not a timed-out item and must not be recorded or retried as one.
 - All of the above use `TimeProvider`, never `DateTime.UtcNow` or raw `Task.Delay`, so every temporal behavior is deterministic under test.
 

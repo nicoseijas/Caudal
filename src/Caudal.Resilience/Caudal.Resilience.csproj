@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Caudal</RootNamespace>
+    <AssemblyName>Caudal.Resilience</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Resilience integration for Caudal flows: run stage selectors through a Polly ResiliencePipeline (retry, timeout, circuit breaker, fallback).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Polly.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Caudal.Core\Caudal.Core.csproj" />
+  </ItemGroup>
+
+</Project>
