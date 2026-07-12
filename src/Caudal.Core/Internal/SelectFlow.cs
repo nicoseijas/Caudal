@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -20,24 +21,38 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
 
     internal SelectFlow(
         FlowBase<TSource> upstream,
+        string operatorName,
         Func<TSource, CancellationToken, Task<StageResult<TResult>>> selector,
         SelectAsyncOptions selectOptions)
-        : base(upstream.Options)
+        : base(upstream, operatorName, upstream.Options)
     {
         _upstream = upstream;
         _selector = selector;
         _selectOptions = selectOptions;
     }
 
+    /// <summary>An item waiting in the unordered path's input channel, stamped with the time it was enqueued.</summary>
+    private readonly record struct InputItem(TSource Item, long EnqueuedTimestamp);
+
     public override IAsyncEnumerable<TResult> Enumerate(CancellationToken cancellationToken)
-        => _selectOptions.PreserveOrder
+    {
+        if (Stats is { } stats)
+        {
+            stats.ConfiguredConcurrency = _selectOptions.Concurrency;
+            stats.QueueCapacity = Options.Capacity;
+        }
+
+        return _selectOptions.PreserveOrder
             ? EnumerateOrdered(cancellationToken)
             : EnumerateUnordered(cancellationToken);
+    }
 
     private async IAsyncEnumerable<TResult> EnumerateUnordered(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var input = Channel.CreateBounded<TSource>(new BoundedChannelOptions(1)
+        Stats?.MarkStarted();
+
+        var input = Channel.CreateBounded<InputItem>(new BoundedChannelOptions(1)
         {
             SingleWriter = true,
         });
@@ -46,9 +61,14 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
             SingleReader = true,
         });
 
+        if (Stats is { } stats)
+        {
+            stats.QueueLengthProbe = () => output.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
+        var pump = PumpUnorderedAsync(input.Writer, cts.Token);
         var workers = new Task[_selectOptions.Concurrency];
         for (var i = 0; i < workers.Length; i++)
         {
@@ -72,19 +92,66 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         }
     }
 
+    private async Task PumpUnorderedAsync(
+        ChannelWriter<InputItem> writer,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
+            {
+                var timestamp = Stats is null ? 0 : Stopwatch.GetTimestamp();
+                await writer.WriteAsync(new InputItem(item, timestamp), cancellationToken).ConfigureAwait(false);
+            }
+
+            writer.Complete();
+        }
+        catch (Exception ex)
+        {
+            writer.TryComplete(ex);
+        }
+    }
+
     private async Task WorkerAsync(
-        ChannelReader<TSource> reader,
+        ChannelReader<InputItem> reader,
         ChannelWriter<TResult> writer,
         CancellationTokenSource cts)
     {
         try
         {
-            await foreach (var item in reader.ReadAllAsync(cts.Token).ConfigureAwait(false))
+            await foreach (var entry in reader.ReadAllAsync(cts.Token).ConfigureAwait(false))
             {
-                var result = await _selector(item, cts.Token).ConfigureAwait(false);
+                Stats?.ItemReceived();
+                if (entry.EnqueuedTimestamp != 0)
+                {
+                    Stats?.RecordQueueTicks(Stopwatch.GetTimestamp() - entry.EnqueuedTimestamp);
+                }
+
+                Stats?.WorkerStarted();
+                var t0 = Stats is null ? 0 : Stopwatch.GetTimestamp();
+                StageResult<TResult> result;
+                try
+                {
+                    result = await _selector(entry.Item, cts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (t0 != 0)
+                    {
+                        Stats?.RecordProcessingTicks(Stopwatch.GetTimestamp() - t0);
+                    }
+
+                    Stats?.WorkerFinished();
+                }
+
                 if (result.Emit)
                 {
                     await writer.WriteAsync(result.Value!, cts.Token).ConfigureAwait(false);
+                    Stats?.ItemCompleted();
+                }
+                else if (result.Failed)
+                {
+                    Stats?.ItemFailed();
                 }
             }
         }
@@ -102,6 +169,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             // First failure wins: it becomes the pipeline's terminal exception and
             // promptly cancels the source, the sibling workers, and their in-flight work.
+            Stats?.ItemFailed();
             if (writer.TryComplete(ex))
             {
                 cts.Cancel();
@@ -127,11 +195,18 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
     private async IAsyncEnumerable<TResult> EnumerateOrdered(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var tasks = Channel.CreateBounded<Task<StageResult<TResult>>>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
+
+        if (Stats is { } stats)
+        {
+            stats.QueueLengthProbe = () => tasks.Reader.Count;
+        }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var gate = new SemaphoreSlim(_selectOptions.Concurrency);
@@ -139,12 +214,20 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
 
         try
         {
+            // Note: the task-queue occupancy time above is not item queue time (that
+            // would require stamping each task at creation and reading it back out
+            // here) — ordered mode does not record AverageQueueTime.
             await foreach (var task in tasks.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 var result = await task.ConfigureAwait(false);
                 if (result.Emit)
                 {
+                    Stats?.ItemCompleted();
                     yield return result.Value!;
+                }
+                else if (result.Failed)
+                {
+                    Stats?.ItemFailed();
                 }
             }
         }
@@ -173,6 +256,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemReceived();
                 await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 pending = RunAsync(item, gate, cancellationToken);
                 await writer.WriteAsync(pending, cancellationToken).ConfigureAwait(false);
@@ -197,7 +281,21 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
     {
         try
         {
-            return await _selector(item, cancellationToken).ConfigureAwait(false);
+            Stats?.WorkerStarted();
+            var t0 = Stats is null ? 0 : Stopwatch.GetTimestamp();
+            try
+            {
+                return await _selector(item, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (t0 != 0)
+                {
+                    Stats?.RecordProcessingTicks(Stopwatch.GetTimestamp() - t0);
+                }
+
+                Stats?.WorkerFinished();
+            }
         }
         finally
         {

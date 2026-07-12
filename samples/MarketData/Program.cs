@@ -19,19 +19,45 @@ Console.CancelKeyPress += (_, e) =>
 
 Console.WriteLine("market-data: 100 symbols, 10 seconds, indicator calculation ~2 ms, concurrency 8");
 
+var flowOptions = new FlowOptions
+{
+    Capacity = 1_024,
+    Name = "market-data",
+    CaptureStatistics = true,
+};
+
+// Held in a variable, before the sink is attached, so it can be snapshotted
+// while the pipeline is running.
+var flow = GeneratePriceUpdates(symbols, cts.Token)
+    .ToFlow(flowOptions)
+    .LatestByKey(update => update.Symbol)
+    .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
+    .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50));
+
+var sinkTask = flow.ForEachAsync(UpdateDashboardAsync, cts.Token);
+
+while (!sinkTask.IsCompleted)
+{
+    await Task.Delay(2_500, CancellationToken.None);
+
+    if (!sinkTask.IsCompleted)
+    {
+        Console.WriteLine(flow.GetSnapshot().Render());
+    }
+}
+
 try
 {
-    await GeneratePriceUpdates(symbols, cts.Token)
-        .ToFlow(capacity: 1_024, name: "market-data")
-        .LatestByKey(update => update.Symbol)
-        .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
-        .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50))
-        .ForEachAsync(UpdateDashboardAsync, cts.Token);
+    await sinkTask;
 }
 catch (OperationCanceledException)
 {
     // The 10-second run (or Ctrl+C) ended the pipeline; this is the normal exit.
 }
+
+Console.WriteLine();
+Console.WriteLine("final snapshot:");
+Console.WriteLine(flow.GetSnapshot().Render());
 
 Console.WriteLine();
 Console.WriteLine($"produced:  {Interlocked.Read(ref produced):N0} price updates");

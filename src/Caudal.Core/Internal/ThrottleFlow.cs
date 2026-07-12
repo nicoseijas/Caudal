@@ -15,7 +15,7 @@ internal sealed class ThrottleFlow<T> : FlowBase<T>
     private long _dropped;
 
     internal ThrottleFlow(FlowBase<T> upstream, TimeSpan period, TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "Throttle", upstream.Options)
     {
         _upstream = upstream;
         _period = period;
@@ -28,20 +28,25 @@ internal sealed class ThrottleFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var emittedAny = false;
         long lastEmit = 0;
 
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
+            Stats?.ItemReceived();
             if (!emittedAny || _timeProvider.GetElapsedTime(lastEmit) >= _period)
             {
                 emittedAny = true;
                 lastEmit = _timeProvider.GetTimestamp();
+                Stats?.ItemCompleted();
                 yield return item;
             }
             else
             {
                 Interlocked.Increment(ref _dropped);
+                Stats?.ItemDropped();
             }
         }
     }

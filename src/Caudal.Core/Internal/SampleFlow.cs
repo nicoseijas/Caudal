@@ -16,7 +16,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
     private long _replaced;
 
     internal SampleFlow(FlowBase<T> upstream, TimeSpan interval, TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "Sample", upstream.Options)
     {
         _upstream = upstream;
         _interval = interval;
@@ -29,14 +29,22 @@ internal sealed class SampleFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var input = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
 
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => input.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token, Stats);
 
         try
         {
@@ -52,6 +60,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                 {
                     if (hasNew)
                     {
+                        Stats?.ItemCompleted();
                         yield return latest!;
                         hasNew = false;
                     }
@@ -68,6 +77,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                 {
                     if (hasNew)
                     {
+                        Stats?.ItemCompleted();
                         yield return latest!;
                         hasNew = false;
                     }
@@ -81,6 +91,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                     // Completion flushes the last unsampled value instead of losing it.
                     if (hasNew)
                     {
+                        Stats?.ItemCompleted();
                         yield return latest!;
                     }
 
@@ -89,9 +100,11 @@ internal sealed class SampleFlow<T> : FlowBase<T>
 
                 while (reader.TryRead(out var item))
                 {
+                    Stats?.ItemReceived();
                     if (hasNew)
                     {
                         Interlocked.Increment(ref _replaced);
+                        Stats?.ItemReplaced();
                     }
 
                     latest = item;

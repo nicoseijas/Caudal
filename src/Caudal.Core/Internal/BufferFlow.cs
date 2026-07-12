@@ -16,7 +16,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
     private long _dropped;
 
     internal BufferFlow(FlowBase<T> upstream, int capacity, BufferFullMode fullMode)
-        : base(upstream.Options)
+        : base(upstream, "Buffer", upstream.Options)
     {
         _upstream = upstream;
         _capacity = capacity;
@@ -29,7 +29,16 @@ internal sealed class BufferFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var channel = CreateChannel();
+
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = _capacity;
+            stats.QueueLengthProbe = () => channel.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pump = PumpAsync(channel.Writer, cts.Token);
 
@@ -37,6 +46,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
         {
             await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemCompleted();
                 yield return item;
             }
         }
@@ -62,7 +72,11 @@ internal sealed class BufferFlow<T> : FlowBase<T>
         };
 
         return _fullMode is BufferFullMode.DropNewest or BufferFullMode.DropOldest
-            ? Channel.CreateBounded<T>(options, _ => Interlocked.Increment(ref _dropped))
+            ? Channel.CreateBounded<T>(options, _ =>
+            {
+                Interlocked.Increment(ref _dropped);
+                Stats?.ItemDropped();
+            })
             : Channel.CreateBounded<T>(options);
     }
 
@@ -72,6 +86,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemReceived();
                 if (_fullMode == BufferFullMode.Reject)
                 {
                     if (!writer.TryWrite(item))

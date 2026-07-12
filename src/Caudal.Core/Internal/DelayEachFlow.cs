@@ -14,7 +14,7 @@ internal sealed class DelayEachFlow<T> : FlowBase<T>
     private readonly TimeProvider _timeProvider;
 
     internal DelayEachFlow(FlowBase<T> upstream, TimeSpan delay, TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "DelayEach", upstream.Options)
     {
         _upstream = upstream;
         _delay = delay;
@@ -24,9 +24,13 @@ internal sealed class DelayEachFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
+            Stats?.ItemReceived();
             await Task.Delay(_delay, _timeProvider, cancellationToken).ConfigureAwait(false);
+            Stats?.ItemCompleted();
             yield return item;
         }
     }

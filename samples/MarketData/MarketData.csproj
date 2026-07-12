@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Caudal.Core\Caudal.Core.csproj" />
+    <ProjectReference Include="..\..\src\Caudal.Diagnostics\Caudal.Diagnostics.csproj" />
   </ItemGroup>
 
 </Project>

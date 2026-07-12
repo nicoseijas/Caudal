@@ -15,7 +15,7 @@ internal sealed class ExpandFlow<TSource, TResult> : FlowBase<TResult>
     internal ExpandFlow(
         FlowBase<TSource> upstream,
         Func<TSource, CancellationToken, IAsyncEnumerable<TResult>> selector)
-        : base(upstream.Options)
+        : base(upstream, "SelectManyAsync", upstream.Options)
     {
         _upstream = upstream;
         _selector = selector;
@@ -24,11 +24,15 @@ internal sealed class ExpandFlow<TSource, TResult> : FlowBase<TResult>
     public override async IAsyncEnumerable<TResult> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
+            Stats?.ItemReceived();
             await foreach (var result in _selector(item, cancellationToken)
                 .WithCancellation(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemCompleted();
                 yield return result;
             }
         }

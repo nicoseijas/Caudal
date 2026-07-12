@@ -18,12 +18,13 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
     private readonly Func<T, TKey> _keySelector;
     private readonly IEqualityComparer<TKey> _comparer;
     private long _replaced;
+    private int _pendingCount;
 
     internal LatestByKeyFlow(
         FlowBase<T> upstream,
         Func<T, TKey> keySelector,
         IEqualityComparer<TKey>? comparer)
-        : base(upstream.Options)
+        : base(upstream, "LatestByKey", upstream.Options)
     {
         _upstream = upstream;
         _keySelector = keySelector;
@@ -36,6 +37,8 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         // Invariant: a key is in this channel if and only if it has an entry in
         // `pending`, so the channel holds each key at most once and its effective
         // bound is the number of distinct keys.
@@ -46,6 +49,11 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
         });
         var pending = new Dictionary<TKey, T>(_comparer);
         var stateLock = new object();
+
+        if (Stats is { } stats)
+        {
+            stats.QueueLengthProbe = () => Volatile.Read(ref _pendingCount);
+        }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pump = PumpAsync(readyKeys.Writer, pending, stateLock, cts.Token);
@@ -59,8 +67,10 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
                 {
                     value = pending[key];
                     pending.Remove(key);
+                    Interlocked.Decrement(ref _pendingCount);
                 }
 
+                Stats?.ItemCompleted();
                 yield return value;
             }
         }
@@ -81,6 +91,7 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemReceived();
                 var key = _keySelector(item);
                 lock (stateLock)
                 {
@@ -88,10 +99,12 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
                     {
                         pending[key] = item;
                         Interlocked.Increment(ref _replaced);
+                        Stats?.ItemReplaced();
                     }
                     else
                     {
                         pending[key] = item;
+                        Interlocked.Increment(ref _pendingCount);
                         writer.TryWrite(key);
                     }
                 }

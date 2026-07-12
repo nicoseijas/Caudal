@@ -14,23 +14,34 @@ internal sealed class MergeFlow<T> : FlowBase<T>
     private readonly FlowBase<T>[] _sources;
 
     internal MergeFlow(FlowBase<T>[] sources, FlowOptions options)
-        : base(options)
+        // The spine only carries a single upstream link; Merge's fan-in of multiple
+        // sources is accepted here as a one-source-deep simplification — diagnostics
+        // walking the spine sees only sources[0].
+        : base(sources[0], "Merge", options)
         => _sources = sources;
 
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var output = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleReader = true,
         });
+
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => output.Reader.Count;
+        }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         var pumps = new Task[_sources.Length];
         for (var i = 0; i < _sources.Length; i++)
         {
-            pumps[i] = PumpAsync(_sources[i], output.Writer, cts);
+            pumps[i] = PumpAsync(_sources[i], output.Writer, cts, Stats);
         }
 
         var completion = CompleteWhenDrainedAsync(pumps, output.Writer);
@@ -39,6 +50,7 @@ internal sealed class MergeFlow<T> : FlowBase<T>
         {
             await foreach (var item in output.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemCompleted();
                 yield return item;
             }
         }
@@ -52,12 +64,15 @@ internal sealed class MergeFlow<T> : FlowBase<T>
     private static async Task PumpAsync(
         FlowBase<T> source,
         ChannelWriter<T> writer,
-        CancellationTokenSource cts)
+        CancellationTokenSource cts,
+        StageStats? stats)
     {
         try
         {
             await foreach (var item in source.Enumerate(cts.Token).ConfigureAwait(false))
             {
+                // Before the write, so a snapshot can never see completed > received.
+                stats?.ItemReceived();
                 await writer.WriteAsync(item, cts.Token).ConfigureAwait(false);
             }
         }

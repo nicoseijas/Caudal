@@ -177,7 +177,7 @@ public class MergeAndSelectManyTests
     private sealed class SpuriousCancellationFlow : FlowBase<int>
     {
         public SpuriousCancellationFlow()
-            : base(new FlowOptions())
+            : base(null, "SpuriousSource", new FlowOptions())
         {
         }
 

@@ -12,6 +12,14 @@ public sealed record FlowOptions
     /// <summary>The optional name of the pipeline, used for diagnostics.</summary>
     public string? Name { get; init; }
 
+    /// <summary>
+    /// When <see langword="true"/>, every stage collects per-stage statistics
+    /// (counters, queue lengths, timing averages) that <c>Caudal.Diagnostics</c> can
+    /// snapshot, render, and publish as metrics. Off by default: telemetry never
+    /// changes semantics, only cost, and the cost is zero when disabled.
+    /// </summary>
+    public bool CaptureStatistics { get; init; }
+
     internal void Validate()
     {
         if (Capacity < 1)

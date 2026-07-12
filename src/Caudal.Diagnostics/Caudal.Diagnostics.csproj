@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Caudal</RootNamespace>
+    <AssemblyName>Caudal.Diagnostics</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Diagnostics for Caudal flows: per-stage snapshots, a textual pipeline view, and metrics published through System.Diagnostics.Metrics for OpenTelemetry.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Caudal.Core\Caudal.Core.csproj" />
+  </ItemGroup>
+
+</Project>

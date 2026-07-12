@@ -34,9 +34,9 @@ internal static class FailurePolicy
                 }
                 catch
                 {
-                    // Dropped by explicit policy; diagnostics will count these as
-                    // items.failed when that package exists.
-                    return StageResult<TResult>.Nothing;
+                    // Dropped by explicit policy: this is a failure, distinct from a
+                    // filter miss, so diagnostics can tell the two apart.
+                    return StageResult<TResult>.SkippedFailure;
                 }
             },
 

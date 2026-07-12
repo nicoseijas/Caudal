@@ -16,7 +16,7 @@ internal sealed class TimeoutEachFlow<T> : FlowBase<T>
     private readonly TimeProvider _timeProvider;
 
     internal TimeoutEachFlow(FlowBase<T> upstream, TimeSpan timeout, TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "TimeoutEach", upstream.Options)
     {
         _upstream = upstream;
         _timeout = timeout;
@@ -26,14 +26,22 @@ internal sealed class TimeoutEachFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var input = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
 
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => input.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token, Stats);
 
         try
         {
@@ -57,6 +65,7 @@ internal sealed class TimeoutEachFlow<T> : FlowBase<T>
 
                 while (reader.TryRead(out var item))
                 {
+                    Stats?.ItemCompleted();
                     yield return item;
                 }
             }

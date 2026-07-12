@@ -60,6 +60,7 @@ public static class FlowOperatorExtensions
 
         return new SelectFlow<TSource, TResult>(
             upstream,
+            "SelectAsync",
             FailurePolicy.Wrap(selector, options.FailureMode),
             options);
     }
@@ -88,6 +89,7 @@ public static class FlowOperatorExtensions
 
         return new SelectFlow<TSource, FlowResult<TResult>>(
             upstream,
+            "SelectResultAsync",
             FailurePolicy.WrapCapture(selector),
             options);
     }
@@ -141,6 +143,7 @@ public static class FlowOperatorExtensions
 
         return new SelectFlow<T, T>(
             upstream,
+            "WhereAsync",
             failureMode == FlowFailureMode.Skip ? SkipOnFailure(evaluate) : evaluate,
             options);
     }
@@ -171,7 +174,9 @@ public static class FlowOperatorExtensions
             }
             catch
             {
-                return StageResult<T>.Nothing;
+                // Dropped by explicit Skip policy: a failure, distinct from a
+                // predicate returning false (a filter miss, not a failure).
+                return StageResult<T>.SkippedFailure;
             }
         };
 }

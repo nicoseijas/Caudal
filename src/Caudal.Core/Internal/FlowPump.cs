@@ -12,12 +12,17 @@ internal static class FlowPump
     public static async Task RunAsync<T>(
         FlowBase<T> upstream,
         ChannelWriter<T> writer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        StageStats? stats = null)
     {
         try
         {
             await foreach (var item in upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
+                // Count before the write: once written, the consumer may complete the
+                // item before this continuation resumes, and a snapshot must never
+                // observe completed > received.
+                stats?.ItemReceived();
                 await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 

@@ -13,17 +13,25 @@ internal sealed class SourceFlow<T> : FlowBase<T>
     private readonly IAsyncEnumerable<T> _source;
 
     internal SourceFlow(IAsyncEnumerable<T> source, FlowOptions options)
-        : base(options)
+        : base(null, "Source", options)
         => _source = source;
 
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var channel = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
+
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => channel.Reader.Count;
+        }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pump = PumpAsync(channel.Writer, cts.Token);
@@ -32,6 +40,7 @@ internal sealed class SourceFlow<T> : FlowBase<T>
         {
             await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemCompleted();
                 yield return item;
             }
         }
@@ -48,6 +57,8 @@ internal sealed class SourceFlow<T> : FlowBase<T>
         {
             await foreach (var item in _source.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
+                // Before the write, so a snapshot can never see completed > received.
+                Stats?.ItemReceived();
                 await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 

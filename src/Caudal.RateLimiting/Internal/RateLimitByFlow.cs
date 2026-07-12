@@ -23,7 +23,7 @@ internal sealed class RateLimitByFlow<T, TKey> : FlowBase<T>
         FlowBase<T> upstream,
         Func<T, TKey> keySelector,
         Func<PartitionedRateLimiter<TKey>> limiterFactory)
-        : base(upstream.Options)
+        : base(upstream, "RateLimitBy", upstream.Options)
     {
         _upstream = upstream;
         _keySelector = keySelector;
@@ -33,11 +33,14 @@ internal sealed class RateLimitByFlow<T, TKey> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var limiter = _limiterFactory();
         try
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
+                Stats?.ItemReceived();
                 var key = _keySelector(item);
                 using var lease = await limiter.AcquireAsync(key, 1, cancellationToken).ConfigureAwait(false);
                 if (!lease.IsAcquired)
@@ -46,6 +49,7 @@ internal sealed class RateLimitByFlow<T, TKey> : FlowBase<T>
                         "The rate limiter rejected the acquisition (queue limit exceeded).");
                 }
 
+                Stats?.ItemCompleted();
                 yield return item;
             }
         }

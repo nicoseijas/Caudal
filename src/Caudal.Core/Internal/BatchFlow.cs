@@ -21,7 +21,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
         int maximumSize,
         TimeSpan maximumDelay,
         TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "Batch", upstream.Options)
     {
         _upstream = upstream;
         _maximumSize = maximumSize;
@@ -32,14 +32,22 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
     public override async IAsyncEnumerable<IReadOnlyList<T>> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var input = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
 
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => input.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token, Stats);
 
         try
         {
@@ -62,6 +70,8 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                     Drain(reader, batch);
                     if (batch.Count >= _maximumSize)
                     {
+                        // Completed counts batches, not source items, for this stage.
+                        Stats?.ItemCompleted();
                         yield return batch;
                         batch = NewBatch();
                     }
@@ -72,6 +82,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 var remaining = _maximumDelay - _timeProvider.GetElapsedTime(batchStart);
                 if (remaining <= TimeSpan.Zero)
                 {
+                    Stats?.ItemCompleted();
                     yield return batch;
                     batch = NewBatch();
                     continue;
@@ -84,6 +95,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
                 if (outcome == TimedWaitOutcome.TimerElapsed)
                 {
+                    Stats?.ItemCompleted();
                     yield return batch;
                     batch = NewBatch();
                     continue;
@@ -91,6 +103,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
                 if (outcome == TimedWaitOutcome.Completed)
                 {
+                    Stats?.ItemCompleted();
                     yield return batch;
                     batch = [];
                     break;
@@ -99,6 +112,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 Drain(reader, batch);
                 if (batch.Count >= _maximumSize)
                 {
+                    Stats?.ItemCompleted();
                     yield return batch;
                     batch = NewBatch();
                 }
@@ -106,6 +120,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
             if (batch.Count > 0)
             {
+                Stats?.ItemCompleted();
                 yield return batch;
             }
         }

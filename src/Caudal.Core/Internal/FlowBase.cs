@@ -1,10 +1,11 @@
 namespace Caudal.Internal;
 
-internal abstract class FlowBase<T> : IFlow<T>
+internal abstract class FlowBase<T> : FlowNode, IFlow<T>
 {
-    protected FlowBase(FlowOptions options) => Options = options;
-
-    public FlowOptions Options { get; }
+    protected FlowBase(FlowNode? upstreamNode, string operatorName, FlowOptions options)
+        : base(upstreamNode, operatorName, options)
+    {
+    }
 
     public string? Name => Options.Name;
 

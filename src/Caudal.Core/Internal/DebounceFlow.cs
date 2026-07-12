@@ -17,7 +17,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
     private long _replaced;
 
     internal DebounceFlow(FlowBase<T> upstream, TimeSpan period, TimeProvider timeProvider)
-        : base(upstream.Options)
+        : base(upstream, "Debounce", upstream.Options)
     {
         _upstream = upstream;
         _period = period;
@@ -30,14 +30,22 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
     public override async IAsyncEnumerable<T> Enumerate(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        Stats?.MarkStarted();
+
         var input = Channel.CreateBounded<T>(new BoundedChannelOptions(Options.Capacity)
         {
             SingleWriter = true,
             SingleReader = true,
         });
 
+        if (Stats is { } stats)
+        {
+            stats.QueueCapacity = Options.Capacity;
+            stats.QueueLengthProbe = () => input.Reader.Count;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token);
+        var pump = FlowPump.RunAsync(_upstream, input.Writer, cts.Token, Stats);
 
         try
         {
@@ -62,6 +70,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
                 var remaining = _period - _timeProvider.GetElapsedTime(pendingSince);
                 if (remaining <= TimeSpan.Zero)
                 {
+                    Stats?.ItemCompleted();
                     yield return pending!;
                     hasPending = false;
                     continue;
@@ -73,6 +82,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
 
                 if (outcome == TimedWaitOutcome.TimerElapsed)
                 {
+                    Stats?.ItemCompleted();
                     yield return pending!;
                     hasPending = false;
                     continue;
@@ -81,6 +91,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
                 if (outcome == TimedWaitOutcome.Completed)
                 {
                     // Completion flushes the pending item instead of losing it.
+                    Stats?.ItemCompleted();
                     yield return pending!;
                     break;
                 }
@@ -103,9 +114,11 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
     {
         while (reader.TryRead(out var item))
         {
+            Stats?.ItemReceived();
             if (hasPending)
             {
                 Interlocked.Increment(ref _replaced);
+                Stats?.ItemReplaced();
             }
 
             pending = item;
