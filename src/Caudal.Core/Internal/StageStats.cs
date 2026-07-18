@@ -17,6 +17,7 @@ internal sealed class StageStats
     private long _dropped;
     private long _replaced;
     private int _active;
+    private int _maxActive;
     private long _queueTicks;
     private long _queueSamples;
     private long _processingTicks;
@@ -49,7 +50,18 @@ internal sealed class StageStats
 
     public void ItemReplaced() => Interlocked.Increment(ref _replaced);
 
-    public void WorkerStarted() => Interlocked.Increment(ref _active);
+    public void WorkerStarted()
+    {
+        var now = Interlocked.Increment(ref _active);
+        int seen;
+        while (now > (seen = Volatile.Read(ref _maxActive)))
+        {
+            if (Interlocked.CompareExchange(ref _maxActive, now, seen) == seen)
+            {
+                break;
+            }
+        }
+    }
 
     public void WorkerFinished() => Interlocked.Decrement(ref _active);
 
@@ -76,6 +88,9 @@ internal sealed class StageStats
     public long Replaced => Interlocked.Read(ref _replaced);
 
     public int Active => Volatile.Read(ref _active);
+
+    /// <summary>The highest number of concurrently active workers ever observed.</summary>
+    public int MaxActive => Volatile.Read(ref _maxActive);
 
     public int QueueLength => QueueLengthProbe?.Invoke() ?? 0;
 

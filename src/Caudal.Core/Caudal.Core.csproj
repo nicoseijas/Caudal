@@ -11,6 +11,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Caudal.Core.Tests" />
     <InternalsVisibleTo Include="Caudal.Diagnostics" />
+    <InternalsVisibleTo Include="Caudal.Testing" />
     <InternalsVisibleTo Include="Caudal.RateLimiting" />
   </ItemGroup>
 
