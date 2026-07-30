@@ -1,0 +1,7 @@
+# Benchmark-project relaxations. BenchmarkDotNet requires public instance
+# methods on unsealed classes, which trips the make-static analyzer; and
+# per-iteration disposables owned by [IterationSetup]/[IterationCleanup]
+# pairs trip the owns-disposable-fields rule.
+[*.cs]
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.CA1001.severity = none

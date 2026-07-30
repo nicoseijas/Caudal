@@ -14,7 +14,7 @@ Caudal is a .NET library for building bounded, cancellable, observable async pip
 3. **Correct cancellation and shutdown** — no orphaned tasks, no swallowed exceptions.
 4. **Operational diagnostics** — you can explain a slow pipeline without adding logs to your own code.
 
-> **Status: design phase.** The API below is the design target, not shipped code. There are no NuGet packages yet. The contracts are being specified first — see [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — and the build order is in [`ROADMAP.md`](ROADMAP.md).
+> **Status: pre-release.** The full 0.1–0.3 API surface from the roadmap is implemented and tested (146 tests, all packages build warning-clean), but nothing is published to NuGet yet and the contracts in [`docs/SEMANTICS.md`](docs/SEMANTICS.md) stay open to change until `1.0`. The build order and exit criteria are in [`ROADMAP.md`](ROADMAP.md).
 
 ## What it looks like
 
@@ -66,15 +66,16 @@ Caudal is deliberately small: the goal is around ten operators with precise sema
 - you need concurrency but no backpressure, batching, or per-key semantics — `Parallel.ForEachAsync` is enough;
 - you need a full reactive event system — use Rx.
 
-The benchmark suite will measure the cost of the abstraction against all of these, and the documentation will keep a "when Caudal loses" section current.
+The benchmark suite under [`benchmarks/Caudal.Benchmarks`](benchmarks/Caudal.Benchmarks) measures the cost of the abstraction against all of these; see [`docs/when-not-to-use.md`](docs/when-not-to-use.md) for the full reasoning and [`docs/benchmarks.md`](docs/benchmarks.md) for how to run the suite and read its results honestly.
 
-## Planned packages
+## Packages
 
 | Package | Contents |
 |---|---|
 | `Caudal.Core` | Sources, operators, sinks, error model |
 | `Caudal.Diagnostics` | OpenTelemetry metrics, `FlowSnapshot`, pipeline visualization |
-| `Caudal.Resilience` | `Microsoft.Extensions.Resilience` integration, rate limiting |
+| `Caudal.Resilience` | Polly v8 / `Microsoft.Extensions.Resilience` integration |
+| `Caudal.RateLimiting` | `RateLimit` / `RateLimitBy` over `System.Threading.RateLimiting` |
 | `Caudal.Testing` | Controlled sources, `AsyncGate`, virtual time, pipeline assertions |
 
 ## Documentation
