@@ -3,7 +3,7 @@ using System.Threading.Channels;
 namespace Caudal.Testing;
 
 /// <summary>
-/// A test-controlled source that feeds a single <see cref="IFlow{T}"/>. Tests push
+/// A test-controlled source that feeds a single <see cref="Flow{T}"/>. Tests push
 /// items, completion, or failure at will, from any thread, while the pipeline under
 /// test drains them through <see cref="ToFlow"/>.
 /// </summary>
@@ -90,12 +90,12 @@ public sealed class TestFlowSource<T>
     public int PendingCount => _channel.Reader.Count;
 
     /// <summary>
-    /// Builds the single <see cref="IFlow{T}"/> fed by this source. May be called
+    /// Builds the single <see cref="Flow{T}"/> fed by this source. May be called
     /// only once: a <see cref="TestFlowSource{T}"/> feeds a single flow.
     /// </summary>
     /// <param name="options">Buffer capacity and pipeline name for the resulting flow.</param>
     /// <exception cref="InvalidOperationException"><see cref="ToFlow"/> was already called.</exception>
-    public IFlow<T> ToFlow(FlowOptions? options = null)
+    public Flow<T> ToFlow(FlowOptions? options = null)
     {
         lock (_gate)
         {

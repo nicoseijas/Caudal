@@ -16,12 +16,11 @@ public static class FlowDiagnosticsExtensions
     /// Takes a point-in-time snapshot of every stage in <paramref name="flow"/>, ordered
     /// from its source to its terminal stage.
     /// </summary>
-    /// <exception cref="ArgumentException"><paramref name="flow"/> was not created by Caudal.</exception>
     /// <exception cref="InvalidOperationException">
     /// <see cref="FlowOptions.CaptureStatistics"/> was not set to <see langword="true"/>
     /// when the flow was built.
     /// </exception>
-    public static FlowSnapshot GetSnapshot<T>(this IFlow<T> flow)
+    public static FlowSnapshot GetSnapshot<T>(this Flow<T> flow)
     {
         ArgumentNullException.ThrowIfNull(flow);
 
@@ -73,12 +72,11 @@ public static class FlowDiagnosticsExtensions
     /// than polling on a timer, so publishing has no cost beyond a listener's own
     /// collection interval. Dispose the returned value to stop publishing.
     /// </summary>
-    /// <exception cref="ArgumentException"><paramref name="flow"/> was not created by Caudal.</exception>
     /// <exception cref="InvalidOperationException">
     /// <see cref="FlowOptions.CaptureStatistics"/> was not set to <see langword="true"/>
     /// when the flow was built.
     /// </exception>
-    public static IDisposable PublishMetrics<T>(this IFlow<T> flow)
+    public static IDisposable PublishMetrics<T>(this Flow<T> flow)
     {
         ArgumentNullException.ThrowIfNull(flow);
 
@@ -121,18 +119,12 @@ public static class FlowDiagnosticsExtensions
         return meter;
     }
 
-    private static List<FlowNode> WalkChain<T>(IFlow<T> flow)
+    private static List<FlowNode> WalkChain<T>(Flow<T> flow)
     {
         ArgumentNullException.ThrowIfNull(flow);
 
-        var terminal = flow as FlowNode
-            ?? throw new ArgumentException(
-                $"The flow implementation '{flow.GetType()}' was not created by Caudal. " +
-                "Build flows with Flow.From or ToFlow.",
-                nameof(flow));
-
         var chain = new List<FlowNode>();
-        for (var current = (FlowNode?)terminal; current is not null; current = current.UpstreamNode)
+        for (FlowNode? current = flow.Node; current is not null; current = current.UpstreamNode)
         {
             chain.Add(current);
         }

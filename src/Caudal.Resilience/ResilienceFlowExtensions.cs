@@ -12,13 +12,13 @@ public static class ResilienceFlowExtensions
     /// <summary>
     /// Projects each item through <paramref name="selector"/>, executing every
     /// invocation through <paramref name="resiliencePipeline"/>. Semantics otherwise
-    /// match <c>IFlow{TSource}.SelectAsync</c>: <paramref name="concurrency"/>,
+    /// match <c>Flow{TSource}.SelectAsync</c>: <paramref name="concurrency"/>,
     /// <paramref name="preserveOrder"/>, and <paramref name="failureMode"/> apply to
     /// the pipeline-wrapped invocation as a whole — a retry that ultimately fails is
     /// one failed item, handled per <paramref name="failureMode"/>.
     /// </summary>
-    public static IFlow<TResult> SelectAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<TResult>> selector,
         ResiliencePipeline resiliencePipeline,
         int concurrency = 1,
@@ -45,8 +45,8 @@ public static class ResilienceFlowExtensions
     /// Pipeline cancellation is still cancellation: it propagates, it is never
     /// captured.
     /// </summary>
-    public static IFlow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<TResult>> selector,
         ResiliencePipeline resiliencePipeline,
         int concurrency = 1,
@@ -68,7 +68,7 @@ public static class ResilienceFlowExtensions
     /// <c>SelectResultAsync</c> methods run every selector invocation through it.
     /// </summary>
     public static ResilientFlow<T> WithResiliencePipeline<T>(
-        this IFlow<T> flow,
+        this Flow<T> flow,
         ResiliencePipeline resiliencePipeline)
     {
         ArgumentNullException.ThrowIfNull(flow);

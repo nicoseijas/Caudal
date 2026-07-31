@@ -13,12 +13,12 @@ public static class Flow
     /// <typeparam name="T">The type of the items the source produces.</typeparam>
     /// <param name="source">The sequence feeding the pipeline.</param>
     /// <param name="options">Buffer capacity and pipeline name; defaults to <see cref="FlowOptions"/> defaults.</param>
-    public static IFlow<T> From<T>(IAsyncEnumerable<T> source, FlowOptions? options = null)
+    public static Flow<T> From<T>(IAsyncEnumerable<T> source, FlowOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         options ??= new FlowOptions();
         options.Validate();
-        return new SourceFlow<T>(source, options);
+        return new Flow<T>(new SourceFlow<T>(source, options));
     }
 
     /// <summary>
@@ -27,18 +27,22 @@ public static class Flow
     /// merged flow completes when all sources complete, and the first failure
     /// cancels the rest. Buffer capacity and name come from the first flow.
     /// </summary>
-    public static IFlow<T> Merge<T>(params IFlow<T>[] flows)
+    public static Flow<T> Merge<T>(params Flow<T>[] flows)
         => Merge(flows, options: null);
 
     /// <summary>
     /// Interleaves several flows into one, with explicit buffer capacity and name;
-    /// see <see cref="Merge{T}(IFlow{T}[])"/> for the merge semantics.
+    /// see <see cref="Merge{T}(Flow{T}[])"/> for the merge semantics.
     /// </summary>
-    public static IFlow<T> Merge<T>(IEnumerable<IFlow<T>> flows, FlowOptions? options = null)
+    public static Flow<T> Merge<T>(IEnumerable<Flow<T>> flows, FlowOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(flows);
         var sources = flows
-            .Select(flow => FlowBase<T>.FromFlow(flow, nameof(flows)))
+            .Select(flow =>
+            {
+                ArgumentNullException.ThrowIfNull(flow, nameof(flows));
+                return flow.Node;
+            })
             .ToArray();
 
         if (sources.Length == 0)
@@ -48,6 +52,6 @@ public static class Flow
 
         options ??= sources[0].Options;
         options.Validate();
-        return new MergeFlow<T>(sources, options);
+        return new Flow<T>(new MergeFlow<T>(sources, options));
     }
 }

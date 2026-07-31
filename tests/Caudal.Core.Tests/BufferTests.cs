@@ -74,7 +74,7 @@ public class BufferTests
         var buffered = Enumerable.Range(0, 100)
             .ToFlow(capacity: 8)
             .Buffer(capacity: 4, mode);
-        var stage = (BufferFlow<int>)buffered;
+        var stage = (BufferFlow<int>)buffered.Node;
 
         var pipeline = buffered.ForEachAsync(async (item, ct) =>
         {

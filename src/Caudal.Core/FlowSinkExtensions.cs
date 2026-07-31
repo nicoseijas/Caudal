@@ -1,5 +1,3 @@
-using Caudal.Internal;
-
 namespace Caudal;
 
 /// <summary>
@@ -10,14 +8,14 @@ public static class FlowSinkExtensions
 {
     /// <summary>Runs the pipeline, invoking an async action for each item sequentially.</summary>
     public static async Task ForEachAsync<T>(
-        this IFlow<T> flow,
+        this Flow<T> flow,
         Func<T, CancellationToken, Task> action,
         CancellationToken cancellationToken = default)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(action);
 
-        await foreach (var item in upstream.Enumerate(cancellationToken).ConfigureAwait(false))
+        await foreach (var item in flow.Node.Enumerate(cancellationToken).ConfigureAwait(false))
         {
             await action(item, cancellationToken).ConfigureAwait(false);
         }
@@ -25,7 +23,7 @@ public static class FlowSinkExtensions
 
     /// <summary>Runs the pipeline, invoking an async action that does not observe cancellation.</summary>
     public static Task ForEachAsync<T>(
-        this IFlow<T> flow,
+        this Flow<T> flow,
         Func<T, Task> action,
         CancellationToken cancellationToken = default)
     {
@@ -35,13 +33,13 @@ public static class FlowSinkExtensions
 
     /// <summary>Runs the pipeline and collects every result into a list.</summary>
     public static async Task<List<T>> ToListAsync<T>(
-        this IFlow<T> flow,
+        this Flow<T> flow,
         CancellationToken cancellationToken = default)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
 
         var results = new List<T>();
-        await foreach (var item in upstream.Enumerate(cancellationToken).ConfigureAwait(false))
+        await foreach (var item in flow.Node.Enumerate(cancellationToken).ConfigureAwait(false))
         {
             results.Add(item);
         }
@@ -51,12 +49,12 @@ public static class FlowSinkExtensions
 
     /// <summary>Runs the pipeline, discarding results. Useful when stages have side effects.</summary>
     public static async Task ConsumeAsync<T>(
-        this IFlow<T> flow,
+        this Flow<T> flow,
         CancellationToken cancellationToken = default)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
 
-        await foreach (var _ in upstream.Enumerate(cancellationToken).ConfigureAwait(false))
+        await foreach (var _ in flow.Node.Enumerate(cancellationToken).ConfigureAwait(false))
         {
         }
     }

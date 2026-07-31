@@ -14,15 +14,15 @@ public static class FlowShapingExtensions
     /// pressure — memory is bounded by the number of distinct keys, and every
     /// replacement is counted.
     /// </summary>
-    public static IFlow<T> LatestByKey<T, TKey>(
-        this IFlow<T> flow,
+    public static Flow<T> LatestByKey<T, TKey>(
+        this Flow<T> flow,
         Func<T, TKey> keySelector,
         IEqualityComparer<TKey>? comparer = null)
         where TKey : notnull
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(keySelector);
-        return new LatestByKeyFlow<T, TKey>(upstream, keySelector, comparer);
+        return new Flow<T>(new LatestByKeyFlow<T, TKey>(flow.Node, keySelector, comparer));
     }
 
     /// <summary>
@@ -31,12 +31,12 @@ public static class FlowShapingExtensions
     /// modes shed load and count what they drop; <see cref="BufferFullMode.Reject"/>
     /// faults the pipeline with <see cref="FlowBufferFullException"/>.
     /// </summary>
-    public static IFlow<T> Buffer<T>(
-        this IFlow<T> flow,
+    public static Flow<T> Buffer<T>(
+        this Flow<T> flow,
         int capacity,
         BufferFullMode fullMode = BufferFullMode.Wait)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         if (capacity < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be at least 1.");
@@ -47,7 +47,7 @@ public static class FlowShapingExtensions
             throw new ArgumentOutOfRangeException(nameof(fullMode), fullMode, "Unknown buffer full-mode.");
         }
 
-        return new BufferFlow<T>(upstream, capacity, fullMode);
+        return new Flow<T>(new BufferFlow<T>(flow.Node, capacity, fullMode));
     }
 
     /// <summary>
@@ -57,13 +57,13 @@ public static class FlowShapingExtensions
     /// partial batch is always emitted. Timing uses <paramref name="timeProvider"/>
     /// (system time by default) so tests can drive a fake clock.
     /// </summary>
-    public static IFlow<IReadOnlyList<T>> Batch<T>(
-        this IFlow<T> flow,
+    public static Flow<IReadOnlyList<T>> Batch<T>(
+        this Flow<T> flow,
         int maximumSize,
         TimeSpan maximumDelay,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         if (maximumSize < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(maximumSize), maximumSize, "Maximum size must be at least 1.");
@@ -74,25 +74,26 @@ public static class FlowShapingExtensions
             throw new ArgumentOutOfRangeException(nameof(maximumDelay), maximumDelay, "Maximum delay must be positive.");
         }
 
-        return new BatchFlow<T>(upstream, maximumSize, maximumDelay, timeProvider ?? TimeProvider.System);
+        return new Flow<IReadOnlyList<T>>(
+            new BatchFlow<T>(flow.Node, maximumSize, maximumDelay, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>
     /// Expands each item into a sub-sequence, flattened sequentially in source
     /// order. Useful to turn one server, file, or symbol into several work items.
     /// </summary>
-    public static IFlow<TResult> SelectManyAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectManyAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, IAsyncEnumerable<TResult>> selector)
     {
-        var upstream = FlowBase<TSource>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(selector);
-        return new ExpandFlow<TSource, TResult>(upstream, selector);
+        return new Flow<TResult>(new ExpandFlow<TSource, TResult>(flow.Node, selector));
     }
 
     /// <summary>Expands each item through a selector that does not observe cancellation.</summary>
-    public static IFlow<TResult> SelectManyAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectManyAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, IAsyncEnumerable<TResult>> selector)
     {
         ArgumentNullException.ThrowIfNull(selector);
@@ -100,8 +101,8 @@ public static class FlowShapingExtensions
     }
 
     /// <summary>Expands each item through an async selector returning a materialized sequence.</summary>
-    public static IFlow<TResult> SelectManyAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectManyAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<IEnumerable<TResult>>> selector)
     {
         ArgumentNullException.ThrowIfNull(selector);

@@ -21,7 +21,7 @@ public class TimeOperatorTests
         var debounced = source.Reader
             .ToFlow(capacity: 8)
             .Debounce(Step, time);
-        var stage = (DebounceFlow<string>)debounced;
+        var stage = (DebounceFlow<string>)debounced.Node;
 
         var pipeline = debounced.ForEachAsync((item, _) =>
         {
@@ -77,7 +77,7 @@ public class TimeOperatorTests
         var throttled = source.Reader
             .ToFlow(capacity: 8)
             .Throttle(Step, time);
-        var stage = (ThrottleFlow<int>)throttled;
+        var stage = (ThrottleFlow<int>)throttled.Node;
 
         var pipeline = throttled.ForEachAsync((item, _) =>
         {
@@ -128,7 +128,7 @@ public class TimeOperatorTests
         var sampled = source.Reader
             .ToFlow(capacity: 8)
             .Sample(Step, time);
-        var stage = (SampleFlow<string>)sampled;
+        var stage = (SampleFlow<string>)sampled.Node;
 
         var pipeline = sampled.ForEachAsync((item, _) =>
         {
@@ -322,7 +322,7 @@ public class TimeOperatorTests
         var sampled = source.Reader
             .ToFlow(capacity: 8)
             .Sample(Step, time);
-        var stage = (SampleFlow<string>)sampled;
+        var stage = (SampleFlow<string>)sampled.Node;
 
         var pipeline = sampled.ForEachAsync((item, _) =>
         {

@@ -32,7 +32,7 @@ public sealed class TestFlowSource<T>
     void Complete();
     void Fail(Exception exception);
     int PendingCount { get; }
-    IFlow<T> ToFlow(FlowOptions? options = null);
+    Flow<T> ToFlow(FlowOptions? options = null);
 }
 ```
 
@@ -195,7 +195,7 @@ started. There is no timing-dependent branch left in the test.
 ```csharp
 public static class FlowTestingExtensions
 {
-    FlowAssertions<T> Should<T>(this IFlow<T> flow);
+    FlowAssertions<T> Should<T>(this Flow<T> flow);
 }
 
 public sealed class FlowAssertions<T>

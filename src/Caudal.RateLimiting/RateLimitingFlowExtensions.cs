@@ -23,20 +23,20 @@ public static class RateLimitingFlowExtensions
     /// <param name="flow">The upstream flow.</param>
     /// <param name="permitLimit">The maximum number of items allowed per window. Must be at least 1.</param>
     /// <param name="window">The window duration. Must be positive.</param>
-    public static IFlow<T> RateLimit<T>(this IFlow<T> flow, int permitLimit, TimeSpan window)
+    public static Flow<T> RateLimit<T>(this Flow<T> flow, int permitLimit, TimeSpan window)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePermitLimit(permitLimit, nameof(permitLimit));
         ValidateWindow(window, nameof(window));
 
-        return new RateLimitFlow<T>(upstream, () => new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
+        return new Flow<T>(new RateLimitFlow<T>(flow.Node, () => new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
         {
             PermitLimit = permitLimit,
             Window = window,
             QueueLimit = 1,
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             AutoReplenishment = true,
-        }));
+        })));
     }
 
     /// <summary>
@@ -56,12 +56,12 @@ public static class RateLimitingFlowExtensions
     /// </remarks>
     /// <param name="flow">The upstream flow.</param>
     /// <param name="limiterFactory">Creates the limiter for a single run of the pipeline.</param>
-    public static IFlow<T> RateLimit<T>(this IFlow<T> flow, Func<RateLimiter> limiterFactory)
+    public static Flow<T> RateLimit<T>(this Flow<T> flow, Func<RateLimiter> limiterFactory)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(limiterFactory);
 
-        return new RateLimitFlow<T>(upstream, limiterFactory);
+        return new Flow<T>(new RateLimitFlow<T>(flow.Node, limiterFactory));
     }
 
     /// <summary>
@@ -74,20 +74,20 @@ public static class RateLimitingFlowExtensions
     /// <param name="keySelector">Extracts the partition key for an item.</param>
     /// <param name="permitLimit">The maximum number of items allowed per window, per key. Must be at least 1.</param>
     /// <param name="window">The window duration. Must be positive.</param>
-    public static IFlow<T> RateLimitBy<T, TKey>(
-        this IFlow<T> flow,
+    public static Flow<T> RateLimitBy<T, TKey>(
+        this Flow<T> flow,
         Func<T, TKey> keySelector,
         int permitLimit,
         TimeSpan window)
         where TKey : notnull
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(keySelector);
         ValidatePermitLimit(permitLimit, nameof(permitLimit));
         ValidateWindow(window, nameof(window));
 
-        return new RateLimitByFlow<T, TKey>(
-            upstream,
+        return new Flow<T>(new RateLimitByFlow<T, TKey>(
+            flow.Node,
             keySelector,
             () => PartitionedRateLimiter.Create<TKey, TKey>(key => RateLimitPartition.GetFixedWindowLimiter(
                 key,
@@ -98,7 +98,7 @@ public static class RateLimitingFlowExtensions
                     QueueLimit = 1,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     AutoReplenishment = true,
-                })));
+                }))));
     }
 
     /// <summary>
@@ -109,7 +109,7 @@ public static class RateLimitingFlowExtensions
     /// </summary>
     /// <remarks>
     /// The same lease-lifetime caveat as
-    /// <see cref="RateLimit{T}(IFlow{T}, Func{RateLimiter})"/> applies: permits are
+    /// <see cref="RateLimit{T}(Flow{T}, Func{RateLimiter})"/> applies: permits are
     /// acquired sequentially and released when the next item is requested, so
     /// lease-disposal-driven limiters (<c>ConcurrencyLimiter</c>) do not cap
     /// concurrent downstream work here. Use time-released limiter types.
@@ -117,17 +117,17 @@ public static class RateLimitingFlowExtensions
     /// <param name="flow">The upstream flow.</param>
     /// <param name="keySelector">Extracts the partition key for an item.</param>
     /// <param name="limiterFactory">Creates the partitioned limiter for a single run of the pipeline.</param>
-    public static IFlow<T> RateLimitBy<T, TKey>(
-        this IFlow<T> flow,
+    public static Flow<T> RateLimitBy<T, TKey>(
+        this Flow<T> flow,
         Func<T, TKey> keySelector,
         Func<PartitionedRateLimiter<TKey>> limiterFactory)
         where TKey : notnull
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(keySelector);
         ArgumentNullException.ThrowIfNull(limiterFactory);
 
-        return new RateLimitByFlow<T, TKey>(upstream, keySelector, limiterFactory);
+        return new Flow<T>(new RateLimitByFlow<T, TKey>(flow.Node, keySelector, limiterFactory));
     }
 
     private static void ValidatePermitLimit(int permitLimit, string parameterName)

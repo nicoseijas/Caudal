@@ -12,7 +12,7 @@ namespace Caudal;
 /// <typeparam name="T">The type of items in the underlying flow.</typeparam>
 public sealed class ResilientFlow<T>
 {
-    internal ResilientFlow(IFlow<T> source, ResiliencePipeline pipeline)
+    internal ResilientFlow(Flow<T> source, ResiliencePipeline pipeline)
     {
         Source = source;
         Pipeline = pipeline;
@@ -25,7 +25,7 @@ public sealed class ResilientFlow<T>
     /// this instance instead. <c>Source</c> exists as the escape hatch back to the
     /// full Core operator set (Buffer, Batch, time operators, …).
     /// </remarks>
-    public IFlow<T> Source { get; }
+    public Flow<T> Source { get; }
 
     /// <summary>The resilience pipeline every selector invocation runs through.</summary>
     public ResiliencePipeline Pipeline { get; }
@@ -33,10 +33,10 @@ public sealed class ResilientFlow<T>
     /// <summary>
     /// Projects each item through <paramref name="selector"/>, running every
     /// invocation through <see cref="Pipeline"/>. See
-    /// <see cref="ResilienceFlowExtensions.SelectAsync{TSource, TResult}(IFlow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, ResiliencePipeline, int, bool, FlowFailureMode)"/>
+    /// <see cref="ResilienceFlowExtensions.SelectAsync{TSource, TResult}(Flow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, ResiliencePipeline, int, bool, FlowFailureMode)"/>
     /// for the full contract.
     /// </summary>
-    public IFlow<TResult> SelectAsync<TResult>(
+    public Flow<TResult> SelectAsync<TResult>(
         Func<T, CancellationToken, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false,
@@ -47,10 +47,10 @@ public sealed class ResilientFlow<T>
     /// Projects each item through <paramref name="selector"/> under
     /// <see cref="FlowFailureMode.Capture"/>, running every invocation through
     /// <see cref="Pipeline"/>. See
-    /// <see cref="ResilienceFlowExtensions.SelectResultAsync{TSource, TResult}(IFlow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, ResiliencePipeline, int, bool)"/>
+    /// <see cref="ResilienceFlowExtensions.SelectResultAsync{TSource, TResult}(Flow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, ResiliencePipeline, int, bool)"/>
     /// for the full contract.
     /// </summary>
-    public IFlow<FlowResult<TResult>> SelectResultAsync<TResult>(
+    public Flow<FlowResult<TResult>> SelectResultAsync<TResult>(
         Func<T, CancellationToken, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false)

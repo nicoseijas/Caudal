@@ -33,14 +33,14 @@ await orders
 Two entry points exist:
 
 ```csharp
-IFlow<TResult> SelectAsync<TSource, TResult>(
+Flow<TResult> SelectAsync<TSource, TResult>(
     Func<TSource, CancellationToken, Task<TResult>> selector,
     ResiliencePipeline resiliencePipeline,
     int concurrency = 1,
     bool preserveOrder = false,
     FlowFailureMode failureMode = FlowFailureMode.Stop);
 
-IFlow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
+Flow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
     Func<TSource, CancellationToken, Task<TResult>> selector,
     ResiliencePipeline resiliencePipeline,
     int concurrency = 1,
@@ -161,9 +161,9 @@ Until then:
 using System.Threading.RateLimiting;
 using Caudal;
 
-IFlow<T> RateLimit<T>(int permitLimit, TimeSpan window);
-IFlow<T> RateLimit<T>(Func<RateLimiter> limiterFactory);
-IFlow<T> RateLimitBy<T, TKey>(Func<T, TKey> keySelector, int permitLimit, TimeSpan window)
+Flow<T> RateLimit<T>(int permitLimit, TimeSpan window);
+Flow<T> RateLimit<T>(Func<RateLimiter> limiterFactory);
+Flow<T> RateLimitBy<T, TKey>(Func<T, TKey> keySelector, int permitLimit, TimeSpan window)
     where TKey : notnull;
 ```
 

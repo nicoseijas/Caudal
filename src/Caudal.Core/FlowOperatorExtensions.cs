@@ -13,10 +13,10 @@ public static class FlowOperatorExtensions
     /// does: <see cref="FlowFailureMode.Stop"/> (default) faults the pipeline with the
     /// original exception; <see cref="FlowFailureMode.Skip"/> drops the item and
     /// continues. For <see cref="FlowFailureMode.Capture"/> use
-    /// <see cref="SelectResultAsync{TSource, TResult}(IFlow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, int, bool)"/>.
+    /// <see cref="SelectResultAsync{TSource, TResult}(Flow{TSource}, Func{TSource, CancellationToken, Task{TResult}}, int, bool)"/>.
     /// </summary>
-    public static IFlow<TResult> SelectAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false,
@@ -29,8 +29,8 @@ public static class FlowOperatorExtensions
         });
 
     /// <summary>Projects each item through an async selector that does not observe cancellation.</summary>
-    public static IFlow<TResult> SelectAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false,
@@ -41,12 +41,12 @@ public static class FlowOperatorExtensions
     }
 
     /// <summary>Projects each item through an async selector, with full options.</summary>
-    public static IFlow<TResult> SelectAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<TResult> SelectAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<TResult>> selector,
         SelectAsyncOptions options)
     {
-        var upstream = FlowBase<TSource>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(selector);
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -58,11 +58,11 @@ public static class FlowOperatorExtensions
                 nameof(options));
         }
 
-        return new SelectFlow<TSource, TResult>(
-            upstream,
+        return new Flow<TResult>(new SelectFlow<TSource, TResult>(
+            flow.Node,
             "SelectAsync",
             FailurePolicy.Wrap(selector, options.FailureMode),
-            options);
+            options));
     }
 
     /// <summary>
@@ -71,13 +71,13 @@ public static class FlowOperatorExtensions
     /// exception on failure — and the pipeline never faults on selector exceptions.
     /// Cancellation is still cancellation: it propagates, it is never captured.
     /// </summary>
-    public static IFlow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, CancellationToken, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false)
     {
-        var upstream = FlowBase<TSource>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(selector);
         var options = new SelectAsyncOptions
         {
@@ -87,16 +87,16 @@ public static class FlowOperatorExtensions
         };
         options.Validate();
 
-        return new SelectFlow<TSource, FlowResult<TResult>>(
-            upstream,
+        return new Flow<FlowResult<TResult>>(new SelectFlow<TSource, FlowResult<TResult>>(
+            flow.Node,
             "SelectResultAsync",
             FailurePolicy.WrapCapture(selector),
-            options);
+            options));
     }
 
     /// <summary>Projects each item under Capture with a selector that does not observe cancellation.</summary>
-    public static IFlow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
-        this IFlow<TSource> flow,
+    public static Flow<FlowResult<TResult>> SelectResultAsync<TSource, TResult>(
+        this Flow<TSource> flow,
         Func<TSource, Task<TResult>> selector,
         int concurrency = 1,
         bool preserveOrder = false)
@@ -111,13 +111,13 @@ public static class FlowOperatorExtensions
     /// <see cref="FlowFailureMode.Skip"/>, an item whose predicate throws is dropped;
     /// with <see cref="FlowFailureMode.Stop"/> (default) the pipeline faults.
     /// </summary>
-    public static IFlow<T> WhereAsync<T>(
-        this IFlow<T> flow,
+    public static Flow<T> WhereAsync<T>(
+        this Flow<T> flow,
         Func<T, CancellationToken, Task<bool>> predicate,
         int concurrency = 1,
         FlowFailureMode failureMode = FlowFailureMode.Stop)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(predicate);
 
         if (failureMode == FlowFailureMode.Capture)
@@ -141,16 +141,16 @@ public static class FlowOperatorExtensions
                 ? StageResult<T>.From(item)
                 : StageResult<T>.Nothing;
 
-        return new SelectFlow<T, T>(
-            upstream,
+        return new Flow<T>(new SelectFlow<T, T>(
+            flow.Node,
             "WhereAsync",
             failureMode == FlowFailureMode.Skip ? SkipOnFailure(evaluate) : evaluate,
-            options);
+            options));
     }
 
     /// <summary>Filters items through an async predicate that does not observe cancellation.</summary>
-    public static IFlow<T> WhereAsync<T>(
-        this IFlow<T> flow,
+    public static Flow<T> WhereAsync<T>(
+        this Flow<T> flow,
         Func<T, Task<bool>> predicate,
         int concurrency = 1,
         FlowFailureMode failureMode = FlowFailureMode.Stop)

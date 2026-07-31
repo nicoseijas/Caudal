@@ -1,6 +1,6 @@
 namespace Caudal.Internal;
 
-internal abstract class FlowBase<T> : FlowNode, IFlow<T>
+internal abstract class FlowBase<T> : FlowNode
 {
     protected FlowBase(FlowNode? upstreamNode, string operatorName, FlowOptions options)
         : base(upstreamNode, operatorName, options)
@@ -15,13 +15,4 @@ internal abstract class FlowBase<T> : FlowNode, IFlow<T>
     /// they started has completed.
     /// </summary>
     public abstract IAsyncEnumerable<T> Enumerate(CancellationToken cancellationToken);
-
-    internal static FlowBase<T> FromFlow(IFlow<T> flow, string parameterName)
-    {
-        ArgumentNullException.ThrowIfNull(flow, parameterName);
-        return flow as FlowBase<T>
-            ?? throw new ArgumentException(
-                $"The flow implementation '{flow.GetType()}' was not created by Caudal. " +
-                "Build flows with Flow.From or ToFlow.", parameterName);
-    }
 }

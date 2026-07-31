@@ -29,18 +29,23 @@ Status: draft. These contracts freeze at `1.0`; until then, changes are allowed 
 ## First public contract
 
 ```csharp
-public interface IFlow<out T>
+public sealed class Flow<T>
 {
-    string? Name { get; }
+    internal Flow(FlowBase<T> node) { /* ... */ }
+
+    public string? Name { get; }
 }
 
 public static class Flow
 {
-    public static IFlow<T> From<T>(
+    public static Flow<T> From<T>(
         IAsyncEnumerable<T> source,
         FlowOptions? options = null);
 }
 ```
+
+`Flow<T>` is sealed with an internal constructor: external implementations are
+excluded by the type system rather than rejected at runtime.
 
 ```csharp
 public sealed record FlowOptions
@@ -93,7 +98,7 @@ public enum FlowFailureMode
 
 - **`Stop`** — the first exception cancels the rest of the pipeline: the source stops being read, in-flight work is cancelled, and the **original exception** (not a wrapper, not an aggregate) is rethrown at the terminal awaitable. If multiple workers fail concurrently, the first observed failure wins; the others are cancelled and their exceptions are discarded once the primary failure is chosen. When every failure must be retained, `Capture` is the mode for that.
 - **`Skip`** — the failed item is discarded, the failure is reported (counted as `items.failed`, visible to diagnostics), and the pipeline continues. Skip is never the default.
-- **`Capture`** — the failure becomes data. The stage produces `IFlow<FlowResult<T>>`:
+- **`Capture`** — the failure becomes data. The stage produces `Flow<FlowResult<T>>`:
 
 ```csharp
 public readonly record struct FlowResult<T>(

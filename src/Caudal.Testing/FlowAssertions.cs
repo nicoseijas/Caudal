@@ -18,7 +18,7 @@ public sealed class FlowAssertions<T>
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan TeardownGracePeriod = TimeSpan.FromSeconds(5);
 
-    private readonly IFlow<T> _flow;
+    private readonly Flow<T> _flow;
     private readonly FlowBase<T> _flowNode;
 
     private int? _maxConcurrency;
@@ -27,7 +27,7 @@ public sealed class FlowAssertions<T>
     private bool _completeWithoutLeaks;
     private TimeSpan _timeout = DefaultTimeout;
 
-    internal FlowAssertions(IFlow<T> flow, FlowBase<T> flowNode)
+    internal FlowAssertions(Flow<T> flow, FlowBase<T> flowNode)
     {
         _flow = flow;
         _flowNode = flowNode;

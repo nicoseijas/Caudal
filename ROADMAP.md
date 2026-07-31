@@ -15,7 +15,7 @@ The first public version must be small, hard to misuse, and useful enough for pr
 
 Before implementing any operator, write down the decisions that govern the whole library.
 
-The principles, architectural decisions, and the first public contract (`IFlow<T>`, `Flow.From`, `FlowOptions`) live in [`docs/SEMANTICS.md`](docs/SEMANTICS.md).
+The principles, architectural decisions, and the first public contract (`Flow<T>`, `Flow.From`, `FlowOptions`) live in [`docs/SEMANTICS.md`](docs/SEMANTICS.md).
 
 **Exit criterion:** `docs/SEMANTICS.md` answers, unambiguously:
 
@@ -79,7 +79,7 @@ public enum FlowFailureMode
 {
     Stop,    // first error cancels the rest of the pipeline (default)
     Skip,    // the item fails, is reported, and the pipeline continues
-    Capture  // the failure becomes data: IFlow<FlowResult<T>>
+    Capture  // the failure becomes data: Flow<FlowResult<T>>
 }
 ```
 

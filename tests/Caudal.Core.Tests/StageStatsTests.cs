@@ -22,8 +22,8 @@ public class StageStatsTests
 
         results.Should().HaveCount(20);
 
-        var sourceStats = ((FlowBase<int>)source).Stats;
-        var selectStats = ((FlowBase<int>)selected).Stats;
+        var sourceStats = source.Node.Stats;
+        var selectStats = selected.Node.Stats;
 
         sourceStats.Should().NotBeNull();
         selectStats.Should().NotBeNull();
@@ -51,7 +51,7 @@ public class StageStatsTests
         // 0, 3, 6, 9 throw; the other 6 of the 10 items survive.
         survivingResults.Should().HaveCount(6);
 
-        var failureStats = ((FlowBase<int>)withFailures).Stats;
+        var failureStats = withFailures.Node.Stats;
         failureStats.Should().NotBeNull();
         failureStats!.Failed.Should().Be(4);
 
@@ -62,7 +62,7 @@ public class StageStatsTests
 
         filteredResults.Should().HaveCount(5);
 
-        var filterStats = ((FlowBase<int>)filtered).Stats;
+        var filterStats = filtered.Node.Stats;
         filterStats.Should().NotBeNull();
         filterStats!.Failed.Should().Be(0, "a predicate returning false is a filter miss, not a failure");
     }
@@ -82,7 +82,7 @@ public class StageStatsTests
 
         await selected.ToListAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
-        var stats = ((FlowBase<int>)selected).Stats;
+        var stats = selected.Node.Stats;
         stats.Should().NotBeNull();
         stats!.Active.Should().Be(0);
         stats.AverageProcessingTime.Should().BeGreaterThan(TimeSpan.Zero);
@@ -96,8 +96,8 @@ public class StageStatsTests
 
         await selected.ToListAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
-        ((FlowBase<int>)source).Stats.Should().BeNull();
-        ((FlowBase<int>)selected).Stats.Should().BeNull();
+        source.Node.Stats.Should().BeNull();
+        selected.Node.Stats.Should().BeNull();
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class StageStatsTests
 
         var source = Enumerable.Range(0, 20).ToFlow(options);
         var conflated = source.LatestByKey(i => i % 5);
-        var stats = ((FlowBase<int>)conflated).Stats;
+        var stats = conflated.Node.Stats;
         stats.Should().NotBeNull();
 
         var pipeline = conflated.ForEachAsync(async (_, ct) =>

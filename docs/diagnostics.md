@@ -40,7 +40,7 @@ from "nothing happened."
 
 ## Taking a snapshot
 
-`GetSnapshot()` works on any `IFlow<T>` in the chain — call it on the final
+`GetSnapshot()` works on any `Flow<T>` in the chain — call it on the final
 composed flow to see every stage, or on an intermediate one to see only the
 stages upstream of it:
 

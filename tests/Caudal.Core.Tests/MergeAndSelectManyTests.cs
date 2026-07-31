@@ -74,7 +74,7 @@ public class MergeAndSelectManyTests
 
         var act = () => Flow.Merge(
                 TestSources.Infinite(onYield: _ => Interlocked.Increment(ref produced)).ToFlow(capacity: 8),
-                new SpuriousCancellationFlow())
+                new Flow<int>(new SpuriousCancellationFlow()))
             .ConsumeAsync();
 
         await act.Should()

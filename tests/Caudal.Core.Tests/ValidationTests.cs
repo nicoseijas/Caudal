@@ -39,16 +39,7 @@ public class ValidationTests
         nullSelector.Should().Throw<ArgumentNullException>();
     }
 
-    [Fact]
-    public void Foreign_IFlow_implementations_are_rejected()
-    {
-        var foreign = new ForeignFlow();
-        var act = () => foreign.SelectAsync((i, _) => Task.FromResult(i));
-        act.Should().Throw<ArgumentException>().WithMessage("*not created by Caudal*");
-    }
-
-    private sealed class ForeignFlow : IFlow<int>
-    {
-        public string? Name => null;
-    }
+    // A foreign Flow<T> implementation can no longer be written: Flow<T> is sealed
+    // with an internal constructor, so the type system — not a runtime check —
+    // excludes external implementations.
 }

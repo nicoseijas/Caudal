@@ -14,11 +14,9 @@ public static class FlowTestingExtensions
     /// <typeparam name="T">The type of the items the flow produces.</typeparam>
     /// <param name="flow">The flow to assert on.</param>
     /// <exception cref="ArgumentNullException"><paramref name="flow"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="flow"/> was not created by Caudal.</exception>
-    public static FlowAssertions<T> Should<T>(this IFlow<T> flow)
+    public static FlowAssertions<T> Should<T>(this Flow<T> flow)
     {
         ArgumentNullException.ThrowIfNull(flow);
-        var node = FlowBase<T>.FromFlow(flow, nameof(flow));
-        return new FlowAssertions<T>(flow, node);
+        return new FlowAssertions<T>(flow, flow.Node);
     }
 }

@@ -39,7 +39,7 @@ public class LatestByKeyTests
         source.Writer.TryWrite(("A", 4));
         source.Writer.TryWrite(("B", 10));
 
-        var stage = (LatestByKeyFlow<(string Symbol, int Price), string>)conflated;
+        var stage = (LatestByKeyFlow<(string Symbol, int Price), string>)conflated.Node;
         while (stage.ReplacedCount < 2)
         {
             await Task.Delay(10);
@@ -63,7 +63,7 @@ public class LatestByKeyTests
         var results = await conflated.ToListAsync();
 
         results.Should().Equal(Enumerable.Range(0, 500), "every item has its own key, so nothing can be replaced");
-        ((LatestByKeyFlow<int, int>)conflated).ReplacedCount.Should().Be(0);
+        ((LatestByKeyFlow<int, int>)conflated.Node).ReplacedCount.Should().Be(0);
     }
 
     [Fact]

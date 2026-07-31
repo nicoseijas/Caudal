@@ -15,28 +15,28 @@ public static class FlowTimeExtensions
     /// A new arrival within the period replaces the pending item and restarts the
     /// timer; completion flushes the pending item. Replacements are counted.
     /// </summary>
-    public static IFlow<T> Debounce<T>(
-        this IFlow<T> flow,
+    public static Flow<T> Debounce<T>(
+        this Flow<T> flow,
         TimeSpan period,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(period, nameof(period));
-        return new DebounceFlow<T>(upstream, period, timeProvider ?? TimeProvider.System);
+        return new Flow<T>(new DebounceFlow<T>(flow.Node, period, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>
     /// Leading-edge rate limit: emits the first item immediately, then drops (and
     /// counts) every arrival during the following <paramref name="period"/>.
     /// </summary>
-    public static IFlow<T> Throttle<T>(
-        this IFlow<T> flow,
+    public static Flow<T> Throttle<T>(
+        this Flow<T> flow,
         TimeSpan period,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(period, nameof(period));
-        return new ThrottleFlow<T>(upstream, period, timeProvider ?? TimeProvider.System);
+        return new Flow<T>(new ThrottleFlow<T>(flow.Node, period, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>
@@ -44,25 +44,25 @@ public static class FlowTimeExtensions
     /// previous emission; ticks with nothing new emit nothing. Items overwritten
     /// between ticks are counted; completion flushes the last unsampled item.
     /// </summary>
-    public static IFlow<T> Sample<T>(
-        this IFlow<T> flow,
+    public static Flow<T> Sample<T>(
+        this Flow<T> flow,
         TimeSpan interval,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(interval, nameof(interval));
-        return new SampleFlow<T>(upstream, interval, timeProvider ?? TimeProvider.System);
+        return new Flow<T>(new SampleFlow<T>(flow.Node, interval, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>
     /// Groups everything received while a batch is open into one emission per
     /// <paramref name="interval"/>. Sugar over
-    /// <see cref="FlowShapingExtensions.Batch{T}(IFlow{T}, int, TimeSpan, TimeProvider?)"/>
+    /// <see cref="FlowShapingExtensions.Batch{T}(Flow{T}, int, TimeSpan, TimeProvider?)"/>
     /// with an effectively unbounded size: the window is anchored at the batch's
     /// first item, not at wall-clock alignment.
     /// </summary>
-    public static IFlow<IReadOnlyList<T>> BatchEvery<T>(
-        this IFlow<T> flow,
+    public static Flow<IReadOnlyList<T>> BatchEvery<T>(
+        this Flow<T> flow,
         TimeSpan interval,
         int maximumSize = int.MaxValue,
         TimeProvider? timeProvider = null)
@@ -75,28 +75,28 @@ public static class FlowTimeExtensions
     /// an individual item's processing, attach a timeout resilience strategy to the
     /// processing stage (Caudal.Resilience) instead.
     /// </summary>
-    public static IFlow<T> TimeoutEach<T>(
-        this IFlow<T> flow,
+    public static Flow<T> TimeoutEach<T>(
+        this Flow<T> flow,
         TimeSpan timeout,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(timeout, nameof(timeout));
-        return new TimeoutEachFlow<T>(upstream, timeout, timeProvider ?? TimeProvider.System);
+        return new Flow<T>(new TimeoutEachFlow<T>(flow.Node, timeout, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>
     /// Paces the flow: waits <paramref name="delay"/> before emitting each item,
     /// bounding throughput to one item per delay with natural backpressure.
     /// </summary>
-    public static IFlow<T> DelayEach<T>(
-        this IFlow<T> flow,
+    public static Flow<T> DelayEach<T>(
+        this Flow<T> flow,
         TimeSpan delay,
         TimeProvider? timeProvider = null)
     {
-        var upstream = FlowBase<T>.FromFlow(flow, nameof(flow));
+        ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(delay, nameof(delay));
-        return new DelayEachFlow<T>(upstream, delay, timeProvider ?? TimeProvider.System);
+        return new Flow<T>(new DelayEachFlow<T>(flow.Node, delay, timeProvider ?? TimeProvider.System));
     }
 
     private static void ValidatePositive(TimeSpan value, string parameterName)
