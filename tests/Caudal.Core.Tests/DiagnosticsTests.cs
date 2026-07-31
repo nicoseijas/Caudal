@@ -18,13 +18,13 @@ public class DiagnosticsTests
     private const string TwoStageExpectedRender =
         "diagnostics-demo\n" +
         "├─ LatestByKey\n" +
-        "│  received: 100,000\n" +
-        "│  completed: 81,588\n" +
+        "│  inputs: 100,000\n" +
+        "│  outputs: 81,588\n" +
         "│  replaced: 18,412\n" +
         "│  queued: 32/128\n" +
         "└─ SelectAsync\n" +
-        "   received: 81,588\n" +
-        "   completed: 81,563\n" +
+        "   inputs: 81,588\n" +
+        "   outputs: 81,563\n" +
         "   failed: 25\n" +
         "   active: 8/8\n" +
         "   avg queue: 2.5 ms\n" +
@@ -33,8 +33,15 @@ public class DiagnosticsTests
     private const string SingleStageUnnamedExpectedRender =
         "(unnamed)\n" +
         "└─ Source\n" +
-        "   received: 10\n" +
-        "   completed: 10";
+        "   inputs: 10\n" +
+        "   outputs: 10";
+
+    private const string BatchStageExpectedRender =
+        "batch-demo\n" +
+        "└─ Batch\n" +
+        "   inputs: 10\n" +
+        "   outputs: 3\n" +
+        "   batch.items.included: 10";
 
     [Fact]
     public void Render_is_culture_invariant()
@@ -47,6 +54,7 @@ public class DiagnosticsTests
             CultureInfo.CurrentCulture = new CultureInfo("es-AR");
             BuildSingleStageUnnamedSnapshot().Render().Should().Be(SingleStageUnnamedExpectedRender);
             BuildTwoStageSnapshot().Render().Should().Be(TwoStageExpectedRender);
+            BuildBatchStageSnapshot().Render().Should().Be(BatchStageExpectedRender);
         }
         finally
         {
@@ -55,11 +63,14 @@ public class DiagnosticsTests
     }
 
     [Fact]
-    public async Task Received_never_trails_completed_in_a_mid_flight_snapshot()
+    public async Task Outputs_never_exceed_inputs_in_a_mid_flight_snapshot_on_a_1to1_source_stage()
     {
-        // Regression for the counter-ordering race: received must be recorded
+        // Regression for the counter-ordering race: a receipt must be recorded
         // before an item becomes visible downstream, so no snapshot at any
-        // instant may observe completed > received on any stage.
+        // instant may observe outputs > inputs on the source stage. This is a
+        // per-operator contract (Source is 1:1) — it is not a global invariant:
+        // cardinality-changing stages like Batch downstream have no such
+        // relationship between their own inputs and outputs.
         using var cts = new CancellationTokenSource();
 
         var flow = Support.TestSources
@@ -72,12 +83,10 @@ public class DiagnosticsTests
         for (var i = 0; i < 50; i++)
         {
             var snapshot = flow.GetSnapshot();
-            foreach (var stage in snapshot.Stages)
-            {
-                stage.Received.Should().BeGreaterThanOrEqualTo(
-                    stage.Completed,
-                    $"stage {stage.Operator} must never report more completions than receipts");
-            }
+            var sourceStage = snapshot.Stages[0];
+            sourceStage.InputsReceived.Should().BeGreaterThanOrEqualTo(
+                sourceStage.OutputsEmitted,
+                "the Source stage is 1:1: it must never report more emissions than receipts");
 
             await Task.Delay(5);
         }
@@ -95,15 +104,20 @@ public class DiagnosticsTests
     public void Render_uses_the_unnamed_placeholder_and_a_single_terminal_branch()
         => BuildSingleStageUnnamedSnapshot().Render().Should().Be(SingleStageUnnamedExpectedRender);
 
+    [Fact]
+    public void Render_prints_operator_counters_after_the_generic_counters()
+        => BuildBatchStageSnapshot().Render().Should().Be(BatchStageExpectedRender);
+
     private static FlowSnapshot BuildTwoStageSnapshot()
     {
         var latestByKey = new StageSnapshot(
             Operator: "LatestByKey",
-            Received: 100_000,
-            Completed: 81_588,
-            Failed: 0,
-            Dropped: 0,
-            Replaced: 18_412,
+            InputsReceived: 100_000,
+            OutputsEmitted: 81_588,
+            InputsFailed: 0,
+            InputsDropped: 0,
+            InputsReplaced: 18_412,
+            InputsFiltered: 0,
             Queued: 32,
             QueueCapacity: 128,
             Active: 1,
@@ -115,11 +129,12 @@ public class DiagnosticsTests
 
         var selectAsync = new StageSnapshot(
             Operator: "SelectAsync",
-            Received: 81_588,
-            Completed: 81_563,
-            Failed: 25,
-            Dropped: 0,
-            Replaced: 0,
+            InputsReceived: 81_588,
+            OutputsEmitted: 81_563,
+            InputsFailed: 25,
+            InputsDropped: 0,
+            InputsReplaced: 0,
+            InputsFiltered: 0,
             Queued: 0,
             QueueCapacity: 0,
             Active: 8,
@@ -137,11 +152,12 @@ public class DiagnosticsTests
     {
         var source = new StageSnapshot(
             Operator: "Source",
-            Received: 10,
-            Completed: 10,
-            Failed: 0,
-            Dropped: 0,
-            Replaced: 0,
+            InputsReceived: 10,
+            OutputsEmitted: 10,
+            InputsFailed: 0,
+            InputsDropped: 0,
+            InputsReplaced: 0,
+            InputsFiltered: 0,
             Queued: 0,
             QueueCapacity: 0,
             Active: 0,
@@ -154,16 +170,40 @@ public class DiagnosticsTests
         return new FlowSnapshot(null, new[] { source }, TimeSpan.FromSeconds(1));
     }
 
+    private static FlowSnapshot BuildBatchStageSnapshot()
+    {
+        var batch = new StageSnapshot(
+            Operator: "Batch",
+            InputsReceived: 10,
+            OutputsEmitted: 3,
+            InputsFailed: 0,
+            InputsDropped: 0,
+            InputsReplaced: 0,
+            InputsFiltered: 0,
+            Queued: 0,
+            QueueCapacity: 0,
+            Active: 0,
+            ConfiguredConcurrency: 1,
+            QueueTimeSamples: 0,
+            ProcessingTimeSamples: 0,
+            AverageQueueTime: TimeSpan.Zero,
+            AverageProcessingTime: TimeSpan.Zero,
+            OperatorCounters: new Dictionary<string, long> { ["batch.items.included"] = 10 });
+
+        return new FlowSnapshot("batch-demo", new[] { batch }, TimeSpan.FromSeconds(1));
+    }
+
     [Fact]
     public void Aggregate_properties_combine_stages_with_sample_count_weighting()
     {
         var stageA = new StageSnapshot(
             Operator: "A",
-            Received: 500,
-            Completed: 480,
-            Failed: 1,
-            Dropped: 0,
-            Replaced: 0,
+            InputsReceived: 500,
+            OutputsEmitted: 480,
+            InputsFailed: 1,
+            InputsDropped: 0,
+            InputsReplaced: 0,
+            InputsFiltered: 0,
             Queued: 5,
             QueueCapacity: 16,
             Active: 1,
@@ -175,11 +215,12 @@ public class DiagnosticsTests
 
         var stageB = new StageSnapshot(
             Operator: "B",
-            Received: 480,
-            Completed: 470,
-            Failed: 0,
-            Dropped: 2,
-            Replaced: 1,
+            InputsReceived: 480,
+            OutputsEmitted: 470,
+            InputsFailed: 0,
+            InputsDropped: 2,
+            InputsReplaced: 1,
+            InputsFiltered: 0,
             Queued: 2,
             QueueCapacity: 16,
             Active: 3,
@@ -191,11 +232,12 @@ public class DiagnosticsTests
 
         var stageC = new StageSnapshot(
             Operator: "C",
-            Received: 470,
-            Completed: 460,
-            Failed: 0,
-            Dropped: 0,
-            Replaced: 0,
+            InputsReceived: 470,
+            OutputsEmitted: 460,
+            InputsFailed: 0,
+            InputsDropped: 0,
+            InputsReplaced: 0,
+            InputsFiltered: 0,
             Queued: 0,
             QueueCapacity: 0,
             Active: 0,
@@ -207,11 +249,11 @@ public class DiagnosticsTests
 
         var snapshot = new FlowSnapshot("aggregate-demo", new[] { stageA, stageB, stageC }, TimeSpan.FromSeconds(9));
 
-        snapshot.Received.Should().Be(500);
-        snapshot.Completed.Should().Be(460);
-        snapshot.Failed.Should().Be(1);
-        snapshot.Dropped.Should().Be(2);
-        snapshot.Replaced.Should().Be(1);
+        snapshot.InputsReceived.Should().Be(500);
+        snapshot.OutputsEmitted.Should().Be(460);
+        snapshot.InputsFailed.Should().Be(1);
+        snapshot.InputsDropped.Should().Be(2);
+        snapshot.InputsReplaced.Should().Be(1);
         snapshot.Queued.Should().Be(7);
         snapshot.Active.Should().Be(4);
 
@@ -227,8 +269,8 @@ public class DiagnosticsTests
     {
         var snapshot = new FlowSnapshot("empty", Array.Empty<StageSnapshot>(), TimeSpan.Zero);
 
-        snapshot.Received.Should().Be(0);
-        snapshot.Completed.Should().Be(0);
+        snapshot.InputsReceived.Should().Be(0);
+        snapshot.OutputsEmitted.Should().Be(0);
         snapshot.AverageQueueTime.Should().Be(TimeSpan.Zero);
         snapshot.AverageProcessingTime.Should().Be(TimeSpan.Zero);
     }
@@ -248,8 +290,8 @@ public class DiagnosticsTests
 
         snapshot.Name.Should().Be("diag");
         snapshot.Stages.Select(stage => stage.Operator).Should().Equal("Source", "SelectAsync");
-        snapshot.Received.Should().Be(100);
-        snapshot.Completed.Should().Be(100);
+        snapshot.InputsReceived.Should().Be(100);
+        snapshot.OutputsEmitted.Should().Be(100);
         snapshot.Active.Should().Be(0);
         snapshot.PipelineDuration.Should().BeGreaterThan(TimeSpan.Zero);
     }
@@ -266,7 +308,7 @@ public class DiagnosticsTests
     }
 
     [Fact]
-    public async Task PublishMetrics_exposes_live_completed_counts_and_stops_after_disposal()
+    public async Task PublishMetrics_exposes_live_emitted_counts_and_stops_after_disposal()
     {
         var options = new FlowOptions { Capacity = 16, Name = "diag-metrics", CaptureStatistics = true };
 
@@ -277,8 +319,8 @@ public class DiagnosticsTests
         var subscription = flow.PublishMetrics();
         try
         {
-            long? completedValue = null;
-            string? completedOperator = null;
+            long? emittedValue = null;
+            string? emittedOperator = null;
 
             using var listener = new MeterListener();
             listener.InstrumentPublished = (instrument, l) =>
@@ -290,7 +332,7 @@ public class DiagnosticsTests
             };
             listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
             {
-                if (instrument.Name != "caudal.items.completed")
+                if (instrument.Name != "caudal.outputs.emitted")
                 {
                     return;
                 }
@@ -299,8 +341,8 @@ public class DiagnosticsTests
                 {
                     if (tag.Key == "operator" && Equals(tag.Value, "SelectAsync"))
                     {
-                        completedValue = measurement;
-                        completedOperator = (string?)tag.Value;
+                        emittedValue = measurement;
+                        emittedOperator = (string?)tag.Value;
                     }
                 }
             });
@@ -310,8 +352,8 @@ public class DiagnosticsTests
 
             listener.RecordObservableInstruments();
 
-            completedValue.Should().Be(100);
-            completedOperator.Should().Be("SelectAsync");
+            emittedValue.Should().Be(100);
+            emittedOperator.Should().Be("SelectAsync");
         }
         finally
         {

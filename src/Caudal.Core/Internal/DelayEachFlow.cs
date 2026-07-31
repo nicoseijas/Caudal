@@ -28,9 +28,9 @@ internal sealed class DelayEachFlow<T> : FlowBase<T>
 
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
-            Stats?.ItemReceived();
+            Stats?.InputReceived();
             await Task.Delay(_delay, _timeProvider, cancellationToken).ConfigureAwait(false);
-            Stats?.ItemCompleted();
+            Stats?.OutputEmitted();
             yield return item;
         }
     }

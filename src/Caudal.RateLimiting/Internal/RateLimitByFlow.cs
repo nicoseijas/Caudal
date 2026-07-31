@@ -40,7 +40,7 @@ internal sealed class RateLimitByFlow<T, TKey> : FlowBase<T>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemReceived();
+                Stats?.InputReceived();
                 var key = _keySelector(item);
                 using var lease = await limiter.AcquireAsync(key, 1, cancellationToken).ConfigureAwait(false);
                 if (!lease.IsAcquired)
@@ -49,7 +49,7 @@ internal sealed class RateLimitByFlow<T, TKey> : FlowBase<T>
                         "The rate limiter rejected the acquisition (queue limit exceeded).");
                 }
 
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return item;
             }
         }

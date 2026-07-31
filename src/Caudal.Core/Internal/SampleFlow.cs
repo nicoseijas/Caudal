@@ -60,7 +60,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                 {
                     if (hasNew)
                     {
-                        Stats?.ItemCompleted();
+                        Stats?.OutputEmitted();
                         yield return latest!;
                         hasNew = false;
                     }
@@ -77,7 +77,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                 {
                     if (hasNew)
                     {
-                        Stats?.ItemCompleted();
+                        Stats?.OutputEmitted();
                         yield return latest!;
                         hasNew = false;
                     }
@@ -91,7 +91,7 @@ internal sealed class SampleFlow<T> : FlowBase<T>
                     // Completion flushes the last unsampled value instead of losing it.
                     if (hasNew)
                     {
-                        Stats?.ItemCompleted();
+                        Stats?.OutputEmitted();
                         yield return latest!;
                     }
 
@@ -100,11 +100,11 @@ internal sealed class SampleFlow<T> : FlowBase<T>
 
                 while (reader.TryRead(out var item))
                 {
-                    Stats?.ItemReceived();
+                    Stats?.InputReceived();
                     if (hasNew)
                     {
                         Interlocked.Increment(ref _replaced);
-                        Stats?.ItemReplaced();
+                        Stats?.InputReplaced();
                     }
 
                     latest = item;

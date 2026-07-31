@@ -70,8 +70,9 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                     Drain(reader, batch);
                     if (batch.Count >= _maximumSize)
                     {
-                        // Completed counts batches, not source items, for this stage.
-                        Stats?.ItemCompleted();
+                        // outputs.emitted counts batches, not the items inside them —
+                        // batch.items.included (below) carries the item-level count.
+                        EmitBatch(batch);
                         yield return batch;
                         batch = NewBatch();
                     }
@@ -82,7 +83,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 var remaining = _maximumDelay - _timeProvider.GetElapsedTime(batchStart);
                 if (remaining <= TimeSpan.Zero)
                 {
-                    Stats?.ItemCompleted();
+                    EmitBatch(batch);
                     yield return batch;
                     batch = NewBatch();
                     continue;
@@ -95,7 +96,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
                 if (outcome == TimedWaitOutcome.TimerElapsed)
                 {
-                    Stats?.ItemCompleted();
+                    EmitBatch(batch);
                     yield return batch;
                     batch = NewBatch();
                     continue;
@@ -103,7 +104,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
                 if (outcome == TimedWaitOutcome.Completed)
                 {
-                    Stats?.ItemCompleted();
+                    EmitBatch(batch);
                     yield return batch;
                     batch = [];
                     break;
@@ -112,7 +113,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
                 Drain(reader, batch);
                 if (batch.Count >= _maximumSize)
                 {
-                    Stats?.ItemCompleted();
+                    EmitBatch(batch);
                     yield return batch;
                     batch = NewBatch();
                 }
@@ -120,7 +121,7 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
 
             if (batch.Count > 0)
             {
-                Stats?.ItemCompleted();
+                EmitBatch(batch);
                 yield return batch;
             }
         }
@@ -142,4 +143,12 @@ internal sealed class BatchFlow<T> : FlowBase<IReadOnlyList<T>>
         }
     }
 
+    // outputs.emitted counts the batch itself (what this stage actually handed
+    // downstream); batch.items.included separately accumulates the logical items
+    // folded into it. Both are true — there is no pretending the two are equal.
+    private void EmitBatch(List<T> batch)
+    {
+        Stats?.OutputEmitted();
+        Stats?.RecordBatchItems(batch.Count);
+    }
 }

@@ -133,14 +133,14 @@ The inverse list, stated as facts about the semantics, not as marketing:
 - **Real backpressure, not a buffer that silently grows** — a full stage
   suspends its producer; the only ways to shed instead of wait are the
   explicit `Buffer` drop policies and `LatestByKey`'s per-key replacement,
-  and both count what they discard (`items.dropped`, `items.replaced`).
+  and both count what they discard (`inputs.dropped`, `inputs.replaced`).
 - **Cancellation and shutdown as a tested invariant** — "no orphaned tasks"
   is verified by tests, not assumed; `CancellationLatency` in
   `LifecycleBenchmarks` measures the actual cost of that guarantee rather
   than asserting it's free.
 - **Per-key conflation for stale-data-replacement workloads** —
   `LatestByKey` processes the freshest value per key instead of every update,
-  with the discard rate (`items.replaced`) as a first-class, counted number,
+  with the discard rate (`inputs.replaced`) as a first-class, counted number,
   not a side effect you have to infer, and bounded to an explicit
   `maximumKeys` rather than growing with key cardinality.
 - **Diagnostics without instrumenting your own code** — `queue.duration` vs.

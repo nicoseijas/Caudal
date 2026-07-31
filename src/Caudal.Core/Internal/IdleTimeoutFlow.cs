@@ -66,7 +66,7 @@ internal sealed class IdleTimeoutFlow<T> : FlowBase<T>
 
                 while (reader.TryRead(out var item))
                 {
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                     yield return item;
                 }
             }

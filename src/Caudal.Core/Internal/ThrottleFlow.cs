@@ -35,18 +35,18 @@ internal sealed class ThrottleFlow<T> : FlowBase<T>
 
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
-            Stats?.ItemReceived();
+            Stats?.InputReceived();
             if (!emittedAny || _timeProvider.GetElapsedTime(lastEmit) >= _period)
             {
                 emittedAny = true;
                 lastEmit = _timeProvider.GetTimestamp();
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return item;
             }
             else
             {
                 Interlocked.Increment(ref _dropped);
-                Stats?.ItemDropped();
+                Stats?.InputDropped();
             }
         }
     }

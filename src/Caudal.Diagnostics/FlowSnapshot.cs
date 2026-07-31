@@ -10,22 +10,35 @@ namespace Caudal;
 /// <param name="Name">The pipeline's name, or <see langword="null"/> if it was not given one.</param>
 /// <param name="Stages">Every stage in the pipeline, ordered from the source to the terminal stage.</param>
 /// <param name="PipelineDuration">Wall time since the source stage started enumerating.</param>
+/// <remarks>
+/// <see cref="InputsReceived"/> and <see cref="OutputsEmitted"/> are read from the
+/// first and last stage respectively and are NOT comparable to each other whenever
+/// the pipeline contains a cardinality-changing stage (<c>Where</c>, <c>Batch</c>,
+/// <c>SelectMany</c>, <c>LatestByKey</c>, a drop operator, or <c>Capture</c>
+/// filtering). There is no global in-equals-out invariant for a pipeline — each
+/// stage's own semantics decide what, if anything, its inputs and outputs should
+/// have in common. Use each <see cref="StageSnapshot"/>'s own counters (and its
+/// <see cref="StageSnapshot.OperatorCounters"/>) to reason about a specific stage.
+/// </remarks>
 public sealed record FlowSnapshot(string? Name, IReadOnlyList<StageSnapshot> Stages, TimeSpan PipelineDuration)
 {
     /// <summary>The number of items accepted by the source stage; zero if the pipeline has no stages.</summary>
-    public long Received => Stages.Count == 0 ? 0 : Stages[0].Received;
+    public long InputsReceived => Stages.Count == 0 ? 0 : Stages[0].InputsReceived;
 
-    /// <summary>The number of items produced by the terminal stage; zero if the pipeline has no stages.</summary>
-    public long Completed => Stages.Count == 0 ? 0 : Stages[^1].Completed;
+    /// <summary>The number of values produced by the terminal stage; zero if the pipeline has no stages.</summary>
+    public long OutputsEmitted => Stages.Count == 0 ? 0 : Stages[^1].OutputsEmitted;
 
-    /// <summary>The total number of items failed across every stage.</summary>
-    public long Failed => Sum(static stage => stage.Failed);
+    /// <summary>The total number of inputs failed across every stage.</summary>
+    public long InputsFailed => Sum(static stage => stage.InputsFailed);
 
-    /// <summary>The total number of items dropped across every stage.</summary>
-    public long Dropped => Sum(static stage => stage.Dropped);
+    /// <summary>The total number of inputs dropped across every stage.</summary>
+    public long InputsDropped => Sum(static stage => stage.InputsDropped);
 
-    /// <summary>The total number of items replaced across every stage.</summary>
-    public long Replaced => Sum(static stage => stage.Replaced);
+    /// <summary>The total number of inputs replaced across every stage.</summary>
+    public long InputsReplaced => Sum(static stage => stage.InputsReplaced);
+
+    /// <summary>The total number of inputs filtered out across every stage.</summary>
+    public long InputsFiltered => Sum(static stage => stage.InputsFiltered);
 
     /// <summary>The total number of items currently queued across every stage.</summary>
     public int Queued => (int)Sum(static stage => stage.Queued);

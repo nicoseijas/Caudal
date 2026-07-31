@@ -50,7 +50,7 @@ internal sealed class MergeFlow<T> : FlowBase<T>
         {
             await foreach (var item in output.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return item;
             }
         }
@@ -71,8 +71,8 @@ internal sealed class MergeFlow<T> : FlowBase<T>
         {
             await foreach (var item in source.Enumerate(cts.Token).ConfigureAwait(false))
             {
-                // Before the write, so a snapshot can never see completed > received.
-                stats?.ItemReceived();
+                // Before the write, so a snapshot can never see emitted > received.
+                stats?.InputReceived();
                 await writer.WriteAsync(item, cts.Token).ConfigureAwait(false);
             }
         }

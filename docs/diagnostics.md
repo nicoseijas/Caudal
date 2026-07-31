@@ -61,16 +61,16 @@ Console.WriteLine(snapshot.Render());
 ```text
 market-data
 ├─ Source
-│  received: 46,856,728
-│  completed: 243,812
+│  inputs: 46,856,728
+│  outputs: 243,812
 │  queued: 32/1,024
 ├─ LatestByKey
-│  received: 243,844
-│  completed: 243,812
+│  inputs: 243,844
+│  outputs: 243,812
 │  replaced: 18,412
 └─ SelectAsync
-   received: 243,812
-   completed: 243,812
+   inputs: 243,812
+   outputs: 243,812
    active: 8/8
    avg queue: 0.4 ms
    avg processing: 14.3 ms
@@ -87,13 +87,25 @@ This is the part that actually explains a slow pipeline. Each row in a
 isolation, because the diagnosis usually lives in the *relationship* between
 adjacent stages.
 
+`InputsReceived` and `OutputsEmitted` measure what a stage accepted and what
+it actually handed downstream — never a pretended item-for-item equality
+between the two. For a 1:1 stage (`Source`, `SelectAsync`, `DelayEach`, ...)
+they track each other closely. For a cardinality-changing stage they
+legitimately diverge: `Batch` emits batches, not items, so its `OutputsEmitted`
+is the batch count, and `OperatorCounters["batch.items.included"]` carries the
+item-level count instead. `Where` (via `WhereAsync`) emits only what the
+predicate accepts; the rejected inputs land in `InputsFiltered`, not lost or
+miscounted as failure. There is no global in-equals-out invariant — read each
+stage against its own contract.
+
 | Symptom | Diagnosis |
 |---|---|
 | A stage's `queued` is pinned at `QueueCapacity`, and the **next** stage's `active` is pinned at its configured concurrency with a high `AverageProcessingTime` | That next stage is the bottleneck. Its workers are all busy for a long time each, so nothing drains the queue in front of it. Raise its concurrency or speed up the selector. |
 | A stage's `queued` is at capacity, but its own `active` (or the next stage's) is low | Workers are starved somewhere downstream — the backpressure is coming from further down the chain, not from this stage. Keep walking toward the sink. |
-| `Received` is far greater than `Completed` on `LatestByKey`, `Sample`, or `Debounce` | Healthy conflation, not loss. These operators are designed to shed stale items; check `Replaced` — it should roughly account for the gap. If `Replaced + Completed` still falls short of `Received`, something else is wrong, but the gap by itself is the intended behavior. |
-| `Failed` is growing on a stage running under `FlowFailureMode.Skip` | The failure policy is quietly eating errors that would otherwise have stopped the pipeline. `Skip` is doing its job, but a rising `Failed` counter means it's worth looking at *why* — check the exceptions being skipped, don't just watch the counter. |
-| The source stage's `Received` is flat (barely increasing between two snapshots) | The source itself is the bottleneck — it isn't producing items fast enough to saturate anything downstream. Look at what's upstream of the flow, not inside it. |
+| `InputsReceived` is far greater than `OutputsEmitted` on `LatestByKey`, `Sample`, or `Debounce` | Healthy conflation, not loss. These operators are designed to shed stale items; check `InputsReplaced` — it should roughly account for the gap. If `InputsReplaced + OutputsEmitted` still falls short of `InputsReceived`, something else is wrong, but the gap by itself is the intended behavior. |
+| `InputsFailed` is growing on a stage running under `FlowFailureMode.Skip` | The failure policy is quietly eating errors that would otherwise have stopped the pipeline. `Skip` is doing its job, but a rising `InputsFailed` counter means it's worth looking at *why* — check the exceptions being skipped, don't just watch the counter. |
+| `InputsFiltered` is high on a `WhereAsync`/`Where` stage | Expected — the predicate is rejecting most inputs. This is not a failure and not a loss; it is the operator doing its job. |
+| The source stage's `InputsReceived` is flat (barely increasing between two snapshots) | The source itself is the bottleneck — it isn't producing items fast enough to saturate anything downstream. Look at what's upstream of the flow, not inside it. |
 | `AverageQueueTime` is high but `AverageProcessingTime` is low | Items spend their time waiting for a free worker, not being processed. This is a capacity problem (raise concurrency, or reduce arrival rate), not a per-item latency problem. |
 | `AverageQueueTime` is low but `AverageProcessingTime` is high | The opposite: workers get items quickly but each one takes a long time. The selector itself is slow — profile it, or reduce what it does per item. |
 
@@ -130,11 +142,12 @@ cost of publishing metrics is paid once per scrape, not once per interval.
 
 | Instrument | Kind | Meaning |
 |---|---|---|
-| `caudal.items.received` | counter | items a stage has accepted |
-| `caudal.items.completed` | counter | items a stage finished successfully |
-| `caudal.items.failed` | counter | items that failed under `Skip`/`Capture` |
-| `caudal.items.dropped` | counter | items shed by a `Buffer` drop policy |
-| `caudal.items.replaced` | counter | items superseded by conflation (`LatestByKey`, `Sample`, `Debounce`) |
+| `caudal.inputs.received` | counter | items a stage has accepted |
+| `caudal.outputs.emitted` | counter | values a stage actually handed downstream (not necessarily item-for-item — see below) |
+| `caudal.inputs.failed` | counter | inputs that failed under `Skip`/`Capture` |
+| `caudal.inputs.dropped` | counter | inputs shed by a `Buffer` drop policy |
+| `caudal.inputs.replaced` | counter | inputs superseded by conflation (`LatestByKey`, `Sample`, `Debounce`) |
+| `caudal.inputs.filtered` | counter | inputs a predicate rejected (`WhereAsync`) — a filter miss, not a failure |
 | `caudal.queue.length` | gauge | items currently buffered at a stage |
 | `caudal.queue.capacity` | gauge | the stage's configured buffer capacity |
 | `caudal.workers.active` | gauge | concurrently executing workers |
@@ -147,23 +160,25 @@ Every instrument carries `pipeline` (the flow's `Name`), `operator` (e.g.
 so a dashboard can break down by stage without guessing which operator
 produced which series.
 
+`StageSnapshot.OperatorCounters` (e.g. `Batch`'s `batch.items.included`) is not
+published as a metric instrument today — it is available on a `GetSnapshot()`
+snapshot only.
+
 Dispose the registration when the pipeline ends — it unhooks the observable
 callbacks from the meter so a finished flow doesn't keep reporting stale
 numbers (or, worse, get scraped after its internal state has been collected).
 
 ## Honest limitations
 
-- `items.retried` is not emitted yet. Retries happen inside Polly, which has
+- `inputs.retried` is not emitted yet. Retries happen inside Polly, which has
   its own telemetry; a Caudal-side retry counter arrives with the resilience
   telemetry integration, not in this phase.
-- Under `FlowFailureMode.Capture`, a failed item still counts as `completed`,
-  not `failed` — the failure became data (the `FlowResult` carries it), and
+- Under `FlowFailureMode.Capture`, a failed item still counts as `outputs.emitted`,
+  not `inputs.failed` — the failure became data (the `FlowResult` carries it), and
   from the stage's point of view an item that produced a `FlowResult` is an
   item it finished processing.
 - `Merge`'s snapshot walks only its first source's chain; the other sources'
   upstream stages are not included in the tree.
-- `Batch`'s `Completed` counts batches emitted, not items inside them — check
-  the upstream stage for item-level counts.
 - Queue time is only measured in unordered concurrent stages; a stage with
   `Concurrency = 1` or `PreserveOrder = true` does not currently report
   `AverageQueueTime`.

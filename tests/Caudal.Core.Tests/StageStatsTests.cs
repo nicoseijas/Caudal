@@ -12,7 +12,7 @@ namespace Caudal.Core.Tests;
 public class StageStatsTests
 {
     [Fact]
-    public async Task Received_and_completed_counts_match_item_flow_through_source_and_select()
+    public async Task Inputs_received_and_outputs_emitted_match_item_flow_through_source_and_select()
     {
         var options = new FlowOptions { CaptureStatistics = true };
         var source = Enumerable.Range(0, 20).ToFlow(options);
@@ -28,14 +28,17 @@ public class StageStatsTests
         sourceStats.Should().NotBeNull();
         selectStats.Should().NotBeNull();
 
-        sourceStats!.Received.Should().Be(20);
-        sourceStats.Completed.Should().Be(20);
-        selectStats!.Received.Should().Be(20);
-        selectStats.Completed.Should().Be(20);
+        // Source and SelectAsync are both 1:1 stages: every input becomes one
+        // output. That equality is a per-operator contract, not a global rule —
+        // it does not hold for cardinality-changing stages like Batch or Where.
+        sourceStats!.InputsReceived.Should().Be(20);
+        sourceStats.OutputsEmitted.Should().Be(20);
+        selectStats!.InputsReceived.Should().Be(20);
+        selectStats.OutputsEmitted.Should().Be(20);
     }
 
     [Fact]
-    public async Task Skip_mode_failures_count_as_failed_but_whereAsync_filter_misses_do_not()
+    public async Task Skip_mode_failures_count_as_input_failed_but_whereAsync_filter_misses_count_as_input_filtered()
     {
         var options = new FlowOptions { CaptureStatistics = true };
 
@@ -53,7 +56,8 @@ public class StageStatsTests
 
         var failureStats = withFailures.Node.Stats;
         failureStats.Should().NotBeNull();
-        failureStats!.Failed.Should().Be(4);
+        failureStats!.InputsFailed.Should().Be(4);
+        failureStats.InputsFiltered.Should().Be(0, "a Skip failure is a failure, not a filter miss");
 
         var filterSource = Enumerable.Range(0, 10).ToFlow(options);
         var filtered = filterSource.WhereAsync((i, _) => Task.FromResult(i % 2 == 0));
@@ -64,7 +68,31 @@ public class StageStatsTests
 
         var filterStats = filtered.Node.Stats;
         filterStats.Should().NotBeNull();
-        filterStats!.Failed.Should().Be(0, "a predicate returning false is a filter miss, not a failure");
+        filterStats!.InputsFailed.Should().Be(0, "a predicate returning false is a filter miss, not a failure");
+        filterStats.InputsFiltered.Should().Be(5, "the 5 odd inputs were rejected by the predicate");
+    }
+
+    [Fact]
+    public async Task Batch_reports_batches_emitted_and_the_logical_item_count_separately()
+    {
+        var options = new FlowOptions { CaptureStatistics = true };
+        var source = Enumerable.Range(0, 10).ToFlow(options);
+        var batched = source.Batch(maximumSize: 4, maximumDelay: TimeSpan.FromSeconds(10));
+
+        var batches = await batched.ToListAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        // 10 items at maximumSize 4 -> batches of 4, 4, 2 (the final partial batch
+        // is always emitted on source completion).
+        batches.Should().HaveCount(3);
+
+        var batchStats = batched.Node.Stats;
+        batchStats.Should().NotBeNull();
+
+        // outputs.emitted counts batches (what the stage actually handed
+        // downstream) — it is not, and is never meant to be, item count.
+        batchStats!.InputsReceived.Should().Be(10);
+        batchStats.OutputsEmitted.Should().Be(3);
+        batchStats.BatchItemsIncluded.Should().Be(10, "batch.items.included carries the item-level count that outputs.emitted deliberately does not");
     }
 
     [Fact]
@@ -127,19 +155,19 @@ public class StageStatsTests
         // The consumer is stuck on the first item; give the pump time to push the
         // rest of the finite source into the conflation dictionary before asserting.
         var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (stats!.Received < 20 && deadline.Elapsed < TimeSpan.FromSeconds(10))
+        while (stats!.InputsReceived < 20 && deadline.Elapsed < TimeSpan.FromSeconds(10))
         {
             await Task.Delay(10);
         }
 
-        stats!.Received.Should().Be(20);
-        stats.Completed.Should().Be(1, "the consumer has only been handed the first item so far");
+        stats!.InputsReceived.Should().Be(20);
+        stats.OutputsEmitted.Should().Be(1, "the consumer has only been handed the first item so far");
         stats.QueueLength.Should().BeGreaterThan(0, "other keys are still pending while the consumer is blocked");
 
         release.TrySetResult();
         await pipeline.WaitAsync(TimeSpan.FromSeconds(10));
 
-        stats.Received.Should().Be(20);
-        stats.Completed.Should().BeLessThanOrEqualTo(5, "only 5 distinct keys exist, so conflation bounds completions");
+        stats.InputsReceived.Should().Be(20);
+        stats.OutputsEmitted.Should().BeLessThanOrEqualTo(5, "only 5 distinct keys exist, so conflation bounds emissions");
     }
 }

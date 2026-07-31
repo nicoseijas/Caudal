@@ -83,7 +83,7 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
                     Interlocked.Decrement(ref _pendingCount);
                 }
 
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return value;
             }
         }
@@ -104,7 +104,7 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemReceived();
+                Stats?.InputReceived();
                 var key = _keySelector(item);
                 lock (stateLock)
                 {
@@ -112,7 +112,7 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
                     {
                         pending[key] = item;
                         Interlocked.Increment(ref _replaced);
-                        Stats?.ItemReplaced();
+                        Stats?.InputReplaced();
                     }
                     else
                     {

@@ -88,7 +88,7 @@ that item's worker slot. What each strategy does with that placement:
   `BrokenCircuitException` from the selector call, exactly like any other
   exception the selector could throw. It then follows the stage's ordinary
   `FlowFailureMode`: `Stop` faults the whole pipeline, `Skip` drops the item
-  and counts it as `items.failed`, `Capture` records it in the item's
+  and counts it as `inputs.failed`, `Capture` records it in the item's
   `FlowResult`. Caudal adds no circuit-breaker-specific failure mode — an open
   circuit is just another exception to classify.
 - **Fallback.** Runs inside the same call; if it succeeds, the selector

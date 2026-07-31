@@ -71,6 +71,9 @@ public static class FlowDiagnosticsExtensions
     /// instrument reads the live, underlying <c>StageStats</c> at scrape time rather
     /// than polling on a timer, so publishing has no cost beyond a listener's own
     /// collection interval. Dispose the returned value to stop publishing.
+    /// <see cref="StageSnapshot.OperatorCounters"/> (for example
+    /// <c>batch.items.included</c>) is snapshot-only for now — it is not published
+    /// as a metric instrument by this method.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <see cref="FlowOptions.CaptureStatistics"/> was not set to <see langword="true"/>
@@ -85,15 +88,17 @@ public static class FlowDiagnosticsExtensions
         var meter = new Meter(CaudalDiagnostics.MeterName);
 
         meter.CreateObservableCounter(
-            "caudal.items.received", () => MeasureLong(nodes, pipelineName, static s => s.Received));
+            "caudal.inputs.received", () => MeasureLong(nodes, pipelineName, static s => s.InputsReceived));
         meter.CreateObservableCounter(
-            "caudal.items.completed", () => MeasureLong(nodes, pipelineName, static s => s.Completed));
+            "caudal.outputs.emitted", () => MeasureLong(nodes, pipelineName, static s => s.OutputsEmitted));
         meter.CreateObservableCounter(
-            "caudal.items.failed", () => MeasureLong(nodes, pipelineName, static s => s.Failed));
+            "caudal.inputs.failed", () => MeasureLong(nodes, pipelineName, static s => s.InputsFailed));
         meter.CreateObservableCounter(
-            "caudal.items.dropped", () => MeasureLong(nodes, pipelineName, static s => s.Dropped));
+            "caudal.inputs.dropped", () => MeasureLong(nodes, pipelineName, static s => s.InputsDropped));
         meter.CreateObservableCounter(
-            "caudal.items.replaced", () => MeasureLong(nodes, pipelineName, static s => s.Replaced));
+            "caudal.inputs.replaced", () => MeasureLong(nodes, pipelineName, static s => s.InputsReplaced));
+        meter.CreateObservableCounter(
+            "caudal.inputs.filtered", () => MeasureLong(nodes, pipelineName, static s => s.InputsFiltered));
 
         meter.CreateObservableGauge(
             "caudal.queue.length", () => MeasureInt(nodes, pipelineName, static s => s.QueueLength));
@@ -145,11 +150,12 @@ public static class FlowDiagnosticsExtensions
         var stats = node.Stats!;
         return new StageSnapshot(
             stats.OperatorName,
-            stats.Received,
-            stats.Completed,
-            stats.Failed,
-            stats.Dropped,
-            stats.Replaced,
+            stats.InputsReceived,
+            stats.OutputsEmitted,
+            stats.InputsFailed,
+            stats.InputsDropped,
+            stats.InputsReplaced,
+            stats.InputsFiltered,
             stats.QueueLength,
             stats.QueueCapacity,
             stats.Active,
@@ -157,27 +163,53 @@ public static class FlowDiagnosticsExtensions
             stats.QueueTimeSampleCount,
             stats.ProcessingTimeSampleCount,
             stats.AverageQueueTime,
-            stats.AverageProcessingTime);
+            stats.AverageProcessingTime,
+            BuildOperatorCounters(stats));
     }
+
+    private static IReadOnlyDictionary<string, long> BuildOperatorCounters(StageStats stats)
+    {
+        if (stats.BatchItemsIncluded <= 0)
+        {
+            return EmptyOperatorCounters;
+        }
+
+        return new Dictionary<string, long>
+        {
+            ["batch.items.included"] = stats.BatchItemsIncluded,
+        };
+    }
+
+    private static readonly IReadOnlyDictionary<string, long> EmptyOperatorCounters = new Dictionary<string, long>();
 
     private static IEnumerable<string> DetailLines(StageSnapshot stage)
     {
-        yield return string.Create(CultureInfo.InvariantCulture, $"received: {stage.Received:N0}");
-        yield return string.Create(CultureInfo.InvariantCulture, $"completed: {stage.Completed:N0}");
+        yield return string.Create(CultureInfo.InvariantCulture, $"inputs: {stage.InputsReceived:N0}");
+        yield return string.Create(CultureInfo.InvariantCulture, $"outputs: {stage.OutputsEmitted:N0}");
 
-        if (stage.Failed > 0)
+        if (stage.InputsFailed > 0)
         {
-            yield return string.Create(CultureInfo.InvariantCulture, $"failed: {stage.Failed:N0}");
+            yield return string.Create(CultureInfo.InvariantCulture, $"failed: {stage.InputsFailed:N0}");
         }
 
-        if (stage.Dropped > 0)
+        if (stage.InputsDropped > 0)
         {
-            yield return string.Create(CultureInfo.InvariantCulture, $"dropped: {stage.Dropped:N0}");
+            yield return string.Create(CultureInfo.InvariantCulture, $"dropped: {stage.InputsDropped:N0}");
         }
 
-        if (stage.Replaced > 0)
+        if (stage.InputsReplaced > 0)
         {
-            yield return string.Create(CultureInfo.InvariantCulture, $"replaced: {stage.Replaced:N0}");
+            yield return string.Create(CultureInfo.InvariantCulture, $"replaced: {stage.InputsReplaced:N0}");
+        }
+
+        if (stage.InputsFiltered > 0)
+        {
+            yield return string.Create(CultureInfo.InvariantCulture, $"filtered: {stage.InputsFiltered:N0}");
+        }
+
+        foreach (var (key, value) in stage.OperatorCounters)
+        {
+            yield return string.Create(CultureInfo.InvariantCulture, $"{key}: {value:N0}");
         }
 
         if (stage.QueueCapacity > 0)

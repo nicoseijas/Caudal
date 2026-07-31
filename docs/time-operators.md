@@ -11,7 +11,7 @@ so every behavior below is testable with `FakeTimeProvider` — no real delays.
 
 Emit an item only after `period` of **silence** follows it. A new arrival within
 the period replaces the pending item and restarts the timer. Completion flushes
-the pending item immediately. Replaced items are counted (`items.replaced`).
+the pending item immediately. Replaced items are counted (`inputs.replaced`).
 
 ```text
 period = 3
@@ -27,7 +27,7 @@ value of a burst matters.
 
 **Leading edge** rate limit: emit the first item immediately, then drop every
 arrival during the following `period`. Dropped items are counted
-(`items.dropped`) — they are shed, not delayed.
+(`inputs.dropped`) — they are shed, not delayed.
 
 ```text
 period = 4
@@ -43,7 +43,7 @@ event matters and repeats are noise.
 
 A clock ticks every `interval`. At each tick, emit the **latest** item received
 since the previous emission; a tick with nothing new emits nothing. Items
-overwritten between ticks are counted (`items.replaced`). Completion flushes the
+overwritten between ticks are counted (`inputs.replaced`). Completion flushes the
 last unsampled item.
 
 ```text

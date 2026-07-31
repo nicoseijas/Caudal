@@ -81,7 +81,7 @@ public enum BufferFullMode
 }
 ```
 
-Dropped items are counted (`items.dropped`) — a drop is never silent. `LatestByKey` is the other sanctioned form of shedding: replacement per key, counted as `items.replaced`, and itself bounded — it requires an explicit `maximumKeys`, and a new key arriving once that many distinct keys are already pending faults the pipeline with `FlowKeyCapacityException` rather than growing without limit.
+Dropped items are counted (`inputs.dropped`) — a drop is never silent. `LatestByKey` is the other sanctioned form of shedding: replacement per key, counted as `inputs.replaced`, and itself bounded — it requires an explicit `maximumKeys`, and a new key arriving once that many distinct keys are already pending faults the pipeline with `FlowKeyCapacityException` rather than growing without limit.
 
 ### 2. How do errors propagate?
 
@@ -97,7 +97,7 @@ public enum FlowFailureMode
 ```
 
 - **`Stop`** — the first exception cancels the rest of the pipeline: the source stops being read, in-flight work is cancelled, and the **original exception** (not a wrapper, not an aggregate) is rethrown at the terminal awaitable. If multiple workers fail concurrently, the first observed failure wins; the others are cancelled and their exceptions are discarded once the primary failure is chosen. When every failure must be retained, `Capture` is the mode for that.
-- **`Skip`** — the failed item is discarded, the failure is reported (counted as `items.failed`, visible to diagnostics), and the pipeline continues. Skip is never the default.
+- **`Skip`** — the failed item is discarded, the failure is reported (counted as `inputs.failed`, visible to diagnostics), and the pipeline continues. Skip is never the default.
 - **`Capture`** — the failure becomes data. The stage produces `Flow<FlowResult<T>>`:
 
 ```csharp
@@ -111,7 +111,7 @@ This is the mode for batch work where successful results must survive individual
 
 Deliberately excluded: global error callbacks, static error events, aggregate exceptions as the primary error surface, and continue-on-any-error as a default.
 
-`OperationCanceledException` caused by the pipeline's own token is cancellation, not failure. It does not count as `items.failed` and is never retried. The classification is strict: the exception must carry the pipeline's token *and* that token must actually be cancelled. An `OperationCanceledException` that merely forwards the token while nothing was cancelled — or that comes from user code's internal timeout — is an ordinary failure.
+`OperationCanceledException` caused by the pipeline's own token is cancellation, not failure. It does not count as `inputs.failed` and is never retried. The classification is strict: the exception must carry the pipeline's token *and* that token must actually be cancelled. An `OperationCanceledException` that merely forwards the token while nothing was cancelled — or that comes from user code's internal timeout — is an ordinary failure.
 
 ### 3. How is the pipeline cancelled?
 
@@ -176,9 +176,9 @@ These decisions bind Phase 4 (time operators) and Phase 5 (resilience):
 | `ToFlow` | Suspends the source enumerator | None |
 | `SelectAsync` / `WhereAsync` / `SelectManyAsync` | Workers hold their results; upstream intake pauses | None |
 | `Buffer(Wait)` | Producer waits | None |
-| `Buffer(DropNewest/DropOldest)` | Accepts and discards per policy | Counted as `items.dropped` |
+| `Buffer(DropNewest/DropOldest)` | Accepts and discards per policy | Counted as `inputs.dropped` |
 | `Buffer(Reject)` | Write fails visibly | None (failure is surfaced) |
 | `Batch` | Holds the forming batch; upstream backpressure applies | None; final partial batch always emitted |
 | `Merge` | Backpressure propagates to every source | None |
-| `LatestByKey` | Replaces the pending item per key; a new key past `maximumKeys` faults the pipeline | Counted as `items.replaced` |
+| `LatestByKey` | Replaces the pending item per key; a new key past `maximumKeys` faults the pipeline | Counted as `inputs.replaced` |
 | `ForEachAsync` / `ToListAsync` / `ConsumeAsync` | N/A (terminal) | None |

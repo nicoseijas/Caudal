@@ -28,11 +28,11 @@ internal sealed class ExpandFlow<TSource, TResult> : FlowBase<TResult>
 
         await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
         {
-            Stats?.ItemReceived();
+            Stats?.InputReceived();
             await foreach (var result in _selector(item, cancellationToken)
                 .WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return result;
             }
         }

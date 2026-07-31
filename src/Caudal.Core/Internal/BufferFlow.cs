@@ -46,7 +46,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
         {
             await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return item;
             }
         }
@@ -75,7 +75,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
             ? Channel.CreateBounded<T>(options, _ =>
             {
                 Interlocked.Increment(ref _dropped);
-                Stats?.ItemDropped();
+                Stats?.InputDropped();
             })
             : Channel.CreateBounded<T>(options);
     }
@@ -86,7 +86,7 @@ internal sealed class BufferFlow<T> : FlowBase<T>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemReceived();
+                Stats?.InputReceived();
                 if (_fullMode == BufferFullMode.Reject)
                 {
                     if (!writer.TryWrite(item))

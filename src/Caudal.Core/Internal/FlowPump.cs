@@ -21,8 +21,8 @@ internal static class FlowPump
             {
                 // Count before the write: once written, the consumer may complete the
                 // item before this continuation resumes, and a snapshot must never
-                // observe completed > received.
-                stats?.ItemReceived();
+                // observe emitted > received on a 1:1 stage.
+                stats?.InputReceived();
                 await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 

@@ -70,7 +70,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
                 var remaining = _period - _timeProvider.GetElapsedTime(pendingSince);
                 if (remaining <= TimeSpan.Zero)
                 {
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                     yield return pending!;
                     hasPending = false;
                     continue;
@@ -82,7 +82,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
 
                 if (outcome == TimedWaitOutcome.TimerElapsed)
                 {
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                     yield return pending!;
                     hasPending = false;
                     continue;
@@ -91,7 +91,7 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
                 if (outcome == TimedWaitOutcome.Completed)
                 {
                     // Completion flushes the pending item instead of losing it.
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                     yield return pending!;
                     break;
                 }
@@ -114,11 +114,11 @@ internal sealed class DebounceFlow<T> : FlowBase<T>
     {
         while (reader.TryRead(out var item))
         {
-            Stats?.ItemReceived();
+            Stats?.InputReceived();
             if (hasPending)
             {
                 Interlocked.Increment(ref _replaced);
-                Stats?.ItemReplaced();
+                Stats?.InputReplaced();
             }
 
             pending = item;

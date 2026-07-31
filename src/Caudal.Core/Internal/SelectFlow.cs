@@ -121,7 +121,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             await foreach (var entry in reader.ReadAllAsync(cts.Token).ConfigureAwait(false))
             {
-                Stats?.ItemReceived();
+                Stats?.InputReceived();
                 if (entry.EnqueuedTimestamp != 0)
                 {
                     Stats?.RecordQueueTicks(Stopwatch.GetTimestamp() - entry.EnqueuedTimestamp);
@@ -147,11 +147,17 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
                 if (result.Emit)
                 {
                     await writer.WriteAsync(result.Value!, cts.Token).ConfigureAwait(false);
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                 }
                 else if (result.Failed)
                 {
-                    Stats?.ItemFailed();
+                    Stats?.InputFailed();
+                }
+                else
+                {
+                    // Emit=false, Failed=false: a predicate rejected this input — a
+                    // filter miss (for example WhereAsync), never counted as failure.
+                    Stats?.InputFiltered();
                 }
             }
         }
@@ -169,7 +175,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             // First failure wins: it becomes the pipeline's terminal exception and
             // promptly cancels the source, the sibling workers, and their in-flight work.
-            Stats?.ItemFailed();
+            Stats?.InputFailed();
             if (writer.TryComplete(ex))
             {
                 cts.Cancel();
@@ -222,12 +228,18 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
                 var result = await task.ConfigureAwait(false);
                 if (result.Emit)
                 {
-                    Stats?.ItemCompleted();
+                    Stats?.OutputEmitted();
                     yield return result.Value!;
                 }
                 else if (result.Failed)
                 {
-                    Stats?.ItemFailed();
+                    Stats?.InputFailed();
+                }
+                else
+                {
+                    // Emit=false, Failed=false: a predicate rejected this input — a
+                    // filter miss (for example WhereAsync), never counted as failure.
+                    Stats?.InputFiltered();
                 }
             }
         }
@@ -256,7 +268,7 @@ internal sealed class SelectFlow<TSource, TResult> : FlowBase<TResult>
         {
             await foreach (var item in _upstream.Enumerate(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemReceived();
+                Stats?.InputReceived();
                 await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 pending = RunAsync(item, gate, cancellationToken);
                 await writer.WriteAsync(pending, cancellationToken).ConfigureAwait(false);

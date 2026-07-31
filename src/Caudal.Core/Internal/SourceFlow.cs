@@ -40,7 +40,7 @@ internal sealed class SourceFlow<T> : FlowBase<T>
         {
             await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                Stats?.ItemCompleted();
+                Stats?.OutputEmitted();
                 yield return item;
             }
         }
@@ -57,8 +57,8 @@ internal sealed class SourceFlow<T> : FlowBase<T>
         {
             await foreach (var item in _source.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                // Before the write, so a snapshot can never see completed > received.
-                Stats?.ItemReceived();
+                // Before the write, so a snapshot can never see emitted > received.
+                Stats?.InputReceived();
                 await writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 
