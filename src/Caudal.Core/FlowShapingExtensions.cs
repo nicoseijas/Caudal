@@ -11,18 +11,34 @@ public static class FlowShapingExtensions
     /// item for its key instead of queueing behind it. An item already delivered
     /// downstream is never interrupted; when its processing finishes, the latest
     /// value received meanwhile is next. This stage intentionally absorbs upstream
-    /// pressure — memory is bounded by the number of distinct keys, and every
-    /// replacement is counted.
+    /// pressure, but it is not unbounded: memory is bounded by
+    /// <paramref name="maximumKeys"/> distinct pending keys. Replacements of an
+    /// already-pending key are free and counted (never bounded); a NEW key arriving
+    /// once <paramref name="maximumKeys"/> distinct keys are already pending faults
+    /// the pipeline with <see cref="FlowKeyCapacityException"/> under the only
+    /// supported policy, <see cref="KeyOverflowMode.Reject"/>.
     /// </summary>
     public static Flow<T> LatestByKey<T, TKey>(
         this Flow<T> flow,
         Func<T, TKey> keySelector,
+        int maximumKeys,
+        KeyOverflowMode overflowMode = KeyOverflowMode.Reject,
         IEqualityComparer<TKey>? comparer = null)
         where TKey : notnull
     {
         ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(keySelector);
-        return new Flow<T>(new LatestByKeyFlow<T, TKey>(flow.Node, keySelector, comparer));
+        if (maximumKeys < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumKeys), maximumKeys, "Maximum keys must be at least 1.");
+        }
+
+        if (!Enum.IsDefined(overflowMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(overflowMode), overflowMode, "Unknown key overflow-mode.");
+        }
+
+        return new Flow<T>(new LatestByKeyFlow<T, TKey>(flow.Node, keySelector, maximumKeys, overflowMode, comparer));
     }
 
     /// <summary>

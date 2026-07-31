@@ -80,9 +80,9 @@ that item's worker slot. What each strategy does with that placement:
   `queue.duration` everywhere else in Caudal. Time the item spent waiting for
   a free worker slot is never counted against the timeout — the clock starts
   when the selector is actually invoked. This is a different guarantee from
-  `TimeoutEach` (see [`time-operators.md`](time-operators.md)): `TimeoutEach`
+  `IdleTimeout` (see [`time-operators.md`](time-operators.md)): `IdleTimeout`
   bounds silence *upstream*, between items arriving at a stage; a Polly
-  timeout here bounds one item's own execution. Use `TimeoutEach` to detect a
+  timeout here bounds one item's own execution. Use `IdleTimeout` to detect a
   dead source, and a resilience timeout to bound a slow call.
 - **Circuit breaker.** An open circuit means the pipeline throws
   `BrokenCircuitException` from the selector call, exactly like any other

@@ -5,18 +5,19 @@ namespace Caudal.Internal;
 
 /// <summary>
 /// Bounds the silence between consecutive upstream items: if no item arrives within
-/// the timeout, the pipeline faults with <see cref="TimeoutException"/>. The clock
-/// measures upstream production, not downstream queue wait; timing out per-item
-/// processing belongs to a resilience strategy on the processing stage instead.
+/// the timeout, the pipeline faults with <see cref="TimeoutException"/>. This is an
+/// idle timeout — the clock measures upstream production, not downstream queue wait
+/// or per-item processing time. A real per-execution timeout belongs to a resilience
+/// strategy on the processing stage (Caudal.Resilience) instead.
 /// </summary>
-internal sealed class TimeoutEachFlow<T> : FlowBase<T>
+internal sealed class IdleTimeoutFlow<T> : FlowBase<T>
 {
     private readonly FlowBase<T> _upstream;
     private readonly TimeSpan _timeout;
     private readonly TimeProvider _timeProvider;
 
-    internal TimeoutEachFlow(FlowBase<T> upstream, TimeSpan timeout, TimeProvider timeProvider)
-        : base(upstream, "TimeoutEach", upstream.Options)
+    internal IdleTimeoutFlow(FlowBase<T> upstream, TimeSpan timeout, TimeProvider timeProvider)
+        : base(upstream, "IdleTimeout", upstream.Options)
     {
         _upstream = upstream;
         _timeout = timeout;

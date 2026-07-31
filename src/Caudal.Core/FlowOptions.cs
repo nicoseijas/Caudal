@@ -5,7 +5,10 @@ public sealed record FlowOptions
 {
     /// <summary>
     /// The bounded capacity of the stage buffer. When the buffer is full the
-    /// producer waits; no buffer in Caudal is unbounded. Must be at least 1.
+    /// producer waits; every stage buffer in Caudal is bounded, and this is the
+    /// bound for stages backed by one. <c>LatestByKey</c> has no such buffer to
+    /// size — its own bound is the required <c>maximumKeys</c> parameter, which
+    /// caps its key set instead. Must be at least 1.
     /// </summary>
     public int Capacity { get; init; } = 128;
 

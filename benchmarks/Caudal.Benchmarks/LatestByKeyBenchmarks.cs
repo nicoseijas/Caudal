@@ -52,7 +52,7 @@ public class LatestByKeyBenchmarks
         long processed = 0;
         await GenerateUpdates()
             .ToFlow(capacity: 1024)
-            .LatestByKey(u => u.Key)
+            .LatestByKey(u => u.Key, maximumKeys: KeyCount)
             .SelectAsync(SlowSelectAsync, concurrency: Concurrency)
             .ForEachAsync(_ =>
             {

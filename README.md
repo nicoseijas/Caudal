@@ -41,7 +41,7 @@ The operator that best shows why Caudal exists is `LatestByKey`, for real-time f
 ```csharp
 priceUpdates
     .ToFlow(capacity: 1_024)
-    .LatestByKey(x => x.Symbol)     // at most one pending item per key; newer replaces older
+    .LatestByKey(x => x.Symbol, maximumKeys: 1_000)  // at most one pending item per key, bounded to 1,000 keys; newer replaces older
     .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
     .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50))
     .ForEachAsync(UpdateDashboardAsync, ct);
@@ -60,7 +60,7 @@ The full contract is in [`docs/SEMANTICS.md`](docs/SEMANTICS.md). The short vers
 - Telemetry never changes semantics.
 - Each operator documents its behavior under saturation.
 
-Time-based operators (`Debounce`, `Throttle`, `Sample`, `TimeoutEach`) depend on `TimeProvider`, so they are testable with a fake clock and no real delays. Resilience is an integration with `Microsoft.Extensions.Resilience`, not a reimplementation of Polly.
+Time-based operators (`Debounce`, `Throttle`, `Sample`, `IdleTimeout`) depend on `TimeProvider`, so they are testable with a fake clock and no real delays. Resilience is an integration with `Microsoft.Extensions.Resilience`, not a reimplementation of Polly.
 
 ## When not to use Caudal
 

@@ -19,7 +19,7 @@ var options = new FlowOptions
     CaptureStatistics = true,
 };
 
-var flow = source.ToFlow(options).LatestByKey(x => x.Symbol);
+var flow = source.ToFlow(options).LatestByKey(x => x.Symbol, maximumKeys: 1_000);
 ```
 
 Per principle 9 in [`SEMANTICS.md`](SEMANTICS.md) — *telemetry never changes
@@ -49,7 +49,7 @@ using Caudal;
 
 var flow = priceUpdates
     .ToFlow(new FlowOptions { Capacity = 1_024, Name = "market-data", CaptureStatistics = true })
-    .LatestByKey(update => update.Symbol)
+    .LatestByKey(update => update.Symbol, maximumKeys: 1_000)
     .SelectAsync(CalculateIndicatorsAsync, concurrency: 8);
 
 // ... pipeline is running elsewhere ...

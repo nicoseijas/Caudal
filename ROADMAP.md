@@ -109,7 +109,7 @@ The most important operator for real-time applications.
 ```csharp
 priceUpdates
     .ToFlow()
-    .LatestByKey(x => x.Symbol)
+    .LatestByKey(x => x.Symbol, maximumKeys: 1_000)
     .SelectAsync(CalculateIndicators, concurrency: 8);
 ```
 
@@ -149,7 +149,7 @@ Turns one server, file, or symbol into several work items.
 
 Every time-based operator depends on `TimeProvider`, enabling instant, deterministic tests.
 
-Operators: `Debounce`, `Throttle`, `Sample`, `BatchEvery`, `TimeoutEach`, `DelayEach`.
+Operators: `Debounce`, `Throttle`, `Sample`, `BatchEvery`, `IdleTimeout`, `DelayEach`.
 
 `Throttle`, `Debounce`, and `Sample` have ambiguous names across libraries, so the documentation must include marble-style timing diagrams:
 
@@ -182,7 +182,7 @@ flow.RateLimitBy(keySelector: order => order.Exchange, permitLimit: 10, window: 
 Decisions already made (see [`docs/SEMANTICS.md`](docs/SEMANTICS.md)):
 
 - queue time and execution time are measured separately;
-- `TimeoutEach` applies to execution, not to queue wait;
+- `IdleTimeout` applies to execution, not to queue wait;
 - a retry releases its worker slot during the delay;
 - external cancellation is never classified as a transient error.
 
@@ -287,7 +287,7 @@ Caudal/
 | Version | API |
 |---|---|
 | `0.1` | `ToFlow`, `SelectAsync`, `WhereAsync`, `SelectManyAsync`, `ForEachAsync`, `ToListAsync`, `Buffer`, `Batch`, `Merge`, `LatestByKey` |
-| `0.2` | `Debounce`, `Throttle`, `Sample`, `TimeoutEach`, `RateLimit`, `RateLimitBy`, `WithResiliencePipeline` |
+| `0.2` | `Debounce`, `Throttle`, `Sample`, `IdleTimeout`, `RateLimit`, `RateLimitBy`, `WithResiliencePipeline` |
 | `0.3` | OpenTelemetry, snapshots, testing utilities, stress testing |
 
 ### Conditions for `1.0`
@@ -313,7 +313,7 @@ Caudal is not developed in isolation. Two pilots exercise it from the start.
 ```csharp
 priceUpdates
     .ToFlow(capacity: 1_024)
-    .LatestByKey(x => x.Symbol)
+    .LatestByKey(x => x.Symbol, maximumKeys: 1_000)
     .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
     .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50))
     .ForEachAsync(UpdateDashboardAsync, ct);

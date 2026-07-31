@@ -17,7 +17,7 @@ public class LatestByKeyTests
 
         var conflated = source.Reader
             .ToFlow(capacity: 16)
-            .LatestByKey(x => x.Symbol);
+            .LatestByKey(x => x.Symbol, maximumKeys: 16);
 
         var pipeline = conflated.ForEachAsync(async (item, ct) =>
         {
@@ -58,7 +58,7 @@ public class LatestByKeyTests
     {
         var conflated = Enumerable.Range(0, 500)
             .ToFlow(capacity: 32)
-            .LatestByKey(i => i);
+            .LatestByKey(i => i, maximumKeys: 500);
 
         var results = await conflated.ToListAsync();
 
@@ -73,7 +73,7 @@ public class LatestByKeyTests
 
         var act = () => Failing(boom)
             .ToFlow(capacity: 8)
-            .LatestByKey(i => i % 3)
+            .LatestByKey(i => i % 3, maximumKeys: 3)
             .ToListAsync();
 
         var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
@@ -87,11 +87,119 @@ public class LatestByKeyTests
 
         var act = () => Enumerable.Range(0, 100)
             .ToFlow(capacity: 8)
-            .LatestByKey(i => i == 50 ? throw boom : i)
+            .LatestByKey(i => i == 50 ? throw boom : i, maximumKeys: 100)
             .ConsumeAsync();
 
         var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
         thrown.Which.Should().BeSameAs(boom);
+    }
+
+    [Fact]
+    public async Task A_new_key_past_the_limit_faults_the_pipeline_with_FlowKeyCapacityException()
+    {
+        // Every item is its own key. The consumer progresses, but far slower than
+        // the pump floods new keys, so the pending set must hit the cap. The sink
+        // must keep returning between items — a sink blocked inside its action can
+        // never observe the fault (ForEachAsync only rethrows between items).
+        var conflated = Enumerable.Range(0, 1_000)
+            .ToFlow(capacity: 64)
+            .LatestByKey(i => i, maximumKeys: 32);
+
+        var act = () => conflated.ForEachAsync(async (_, ct) => await Task.Delay(20, ct));
+
+        await act.Should().ThrowAsync<FlowKeyCapacityException>().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Replacements_of_an_already_pending_key_never_trigger_overflow()
+    {
+        var source = Channel.CreateUnbounded<int>();
+        var delivered = new List<int>();
+        var firstDelivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var conflated = source.Reader
+            .ToFlow(capacity: 16)
+            .LatestByKey(_ => 0, maximumKeys: 1);
+
+        var pipeline = conflated.ForEachAsync(async (item, ct) =>
+        {
+            delivered.Add(item);
+            firstDelivered.TrySetResult();
+            if (delivered.Count == 1)
+            {
+                await gate.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+            }
+        });
+
+        source.Writer.TryWrite(1);
+        await firstDelivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The consumer is stuck on the first update; every one of these targets the
+        // same single key, so none of them can be a new key and none can overflow.
+        for (var i = 2; i <= 50; i++)
+        {
+            source.Writer.TryWrite(i);
+        }
+
+        var stage = (LatestByKeyFlow<int, int>)conflated.Node;
+        while (stage.ReplacedCount < 48)
+        {
+            await Task.Delay(10);
+        }
+
+        source.Writer.Complete();
+        gate.TrySetResult();
+        await pipeline.WaitAsync(TimeSpan.FromSeconds(10));
+
+        delivered.Should().Equal(1, 50);
+        stage.ReplacedCount.Should().Be(48);
+    }
+
+    [Fact]
+    public void MaximumKeys_less_than_one_is_rejected()
+    {
+        var flow = Enumerable.Range(0, 10).ToFlow(capacity: 8);
+
+        var act = () => flow.LatestByKey(i => i, maximumKeys: 0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public async Task Pending_keys_below_the_limit_are_accepted_after_draining()
+    {
+        var source = Channel.CreateUnbounded<int>();
+        var delivered = new List<int>();
+
+        var conflated = source.Reader
+            .ToFlow(capacity: 16)
+            .LatestByKey(i => i, maximumKeys: 3);
+
+        var pipeline = conflated.ForEachAsync((item, _) =>
+        {
+            delivered.Add(item);
+            return Task.CompletedTask;
+        });
+
+        // 10 distinct keys is well beyond maximumKeys, but each is sent only after
+        // the previous one has been drained: the bound is on PENDING keys, not on
+        // how many distinct keys have ever passed through.
+        for (var i = 0; i < 10; i++)
+        {
+            source.Writer.TryWrite(i);
+            var expectedCount = i + 1;
+            var deadline = System.Diagnostics.Stopwatch.StartNew();
+            while (delivered.Count < expectedCount && deadline.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                await Task.Delay(10);
+            }
+        }
+
+        source.Writer.Complete();
+        await pipeline.WaitAsync(TimeSpan.FromSeconds(10));
+
+        delivered.Should().Equal(Enumerable.Range(0, 10));
     }
 
     private static async IAsyncEnumerable<int> Failing(Exception exception)

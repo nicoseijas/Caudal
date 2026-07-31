@@ -81,7 +81,7 @@ public enum BufferFullMode
 }
 ```
 
-Dropped items are counted (`items.dropped`) — a drop is never silent. `LatestByKey` is the other sanctioned form of shedding: replacement per key, counted as `items.replaced`.
+Dropped items are counted (`items.dropped`) — a drop is never silent. `LatestByKey` is the other sanctioned form of shedding: replacement per key, counted as `items.replaced`, and itself bounded — it requires an explicit `maximumKeys`, and a new key arriving once that many distinct keys are already pending faults the pipeline with `FlowKeyCapacityException` rather than growing without limit.
 
 ### 2. How do errors propagate?
 
@@ -155,7 +155,7 @@ By terminal cause:
 - **Failure (`Stop`)** — in-flight items are cancelled via their token; their results are discarded. Buffered, not-yet-started items are abandoned.
 - **Cancellation** — same as failure: cancel in-flight work, abandon buffered items, terminate.
 
-For `LatestByKey`: an executing item is never interrupted by a newer arrival. The newer item replaces the *pending* slot for that key; when the current execution finishes, the latest value received during it is processed next.
+For `LatestByKey`: an executing item is never interrupted by a newer arrival. The newer item replaces the *pending* slot for that key; when the current execution finishes, the latest value received during it is processed next. Replacing an already-pending key never counts against the stage's capacity; only a genuinely new key does, and only once `maximumKeys` distinct keys are already pending — at that point the stage faults with `FlowKeyCapacityException` under its only overflow policy, `KeyOverflowMode.Reject`, instead of admitting an unbounded number of keys.
 
 ---
 
@@ -164,7 +164,7 @@ For `LatestByKey`: an executing item is never interrupted by a newer arrival. Th
 These decisions bind Phase 4 (time operators) and Phase 5 (resilience):
 
 - **Queue time and execution time are measured separately** (`queue.duration` vs `processing.duration`). A "slow" item that spent 4.9 s in a queue and 100 ms executing is a capacity problem, not a latency problem, and the metrics must be able to say which.
-- **`TimeoutEach` applies to execution only.** Time spent waiting in a queue does not count against an item's timeout.
+- **`IdleTimeout` applies to execution only.** Time spent waiting in a queue does not count against an item's timeout.
 - **A retry releasing its worker slot during its delay remains the design goal (principle 8).** In 0.x, the resilience integration executes the whole Polly `ResiliencePipeline` — including every retry attempt and the delay between them — inside the item's worker slot, so a backoff currently *does* hold capacity that other items could otherwise use. Releasing the slot during a wait would require Caudal to own the retry loop itself (re-queueing an item with its attempt state and resuming it later), which contradicts "Caudal integrates resilience; it does not reimplement Polly." This gap is documented in [`docs/resilience.md`](resilience.md) and will be revisited before `1.0`.
 - **Pipeline cancellation is distinguishable from timeout.** An item cancelled because the pipeline is shutting down is not a timed-out item and must not be recorded or retried as one.
 - All of the above use `TimeProvider`, never `DateTime.UtcNow` or raw `Task.Delay`, so every temporal behavior is deterministic under test.
@@ -180,5 +180,5 @@ These decisions bind Phase 4 (time operators) and Phase 5 (resilience):
 | `Buffer(Reject)` | Write fails visibly | None (failure is surfaced) |
 | `Batch` | Holds the forming batch; upstream backpressure applies | None; final partial batch always emitted |
 | `Merge` | Backpressure propagates to every source | None |
-| `LatestByKey` | Replaces the pending item per key | Counted as `items.replaced` |
+| `LatestByKey` | Replaces the pending item per key; a new key past `maximumKeys` faults the pipeline | Counted as `items.replaced` |
 | `ForEachAsync` / `ToListAsync` / `ConsumeAsync` | N/A (terminal) | None |

@@ -109,7 +109,7 @@ public class StageStatsTests
         var consumed = 0;
 
         var source = Enumerable.Range(0, 20).ToFlow(options);
-        var conflated = source.LatestByKey(i => i % 5);
+        var conflated = source.LatestByKey(i => i % 5, maximumKeys: 5);
         var stats = conflated.Node.Stats;
         stats.Should().NotBeNull();
 

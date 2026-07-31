@@ -30,7 +30,7 @@ var flowOptions = new FlowOptions
 // while the pipeline is running.
 var flow = GeneratePriceUpdates(symbols, cts.Token)
     .ToFlow(flowOptions)
-    .LatestByKey(update => update.Symbol)
+    .LatestByKey(update => update.Symbol, maximumKeys: 128)
     .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
     .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50));
 

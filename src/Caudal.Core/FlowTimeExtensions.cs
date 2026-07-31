@@ -57,32 +57,36 @@ public static class FlowTimeExtensions
     /// <summary>
     /// Groups everything received while a batch is open into one emission per
     /// <paramref name="interval"/>. Sugar over
-    /// <see cref="FlowShapingExtensions.Batch{T}(Flow{T}, int, TimeSpan, TimeProvider?)"/>
-    /// with an effectively unbounded size: the window is anchored at the batch's
-    /// first item, not at wall-clock alignment.
+    /// <see cref="FlowShapingExtensions.Batch{T}(Flow{T}, int, TimeSpan, TimeProvider?)"/>;
+    /// the window is anchored at the batch's first item, not at wall-clock alignment.
+    /// <paramref name="maximumSize"/> is required — no Caudal buffer is allowed to be
+    /// unbounded, so callers must state the cap explicitly rather than relying on a
+    /// silently huge default.
     /// </summary>
     public static Flow<IReadOnlyList<T>> BatchEvery<T>(
         this Flow<T> flow,
         TimeSpan interval,
-        int maximumSize = int.MaxValue,
+        int maximumSize,
         TimeProvider? timeProvider = null)
         => flow.Batch(maximumSize, interval, timeProvider);
 
     /// <summary>
-    /// Bounds the silence between consecutive items: if none arrives within
+    /// Bounds the silence between consecutive upstream items: if none arrives within
     /// <paramref name="timeout"/>, the pipeline faults with
-    /// <see cref="TimeoutException"/>. This times upstream production. To time out
-    /// an individual item's processing, attach a timeout resilience strategy to the
-    /// processing stage (Caudal.Resilience) instead.
+    /// <see cref="TimeoutException"/>. This is an idle timeout — it times upstream
+    /// production, not per-item processing. To time out an individual item's
+    /// processing, attach a timeout resilience strategy to the processing stage
+    /// (Caudal.Resilience) instead. This operator was previously mis-named
+    /// <c>TimeoutEach</c>; that name is reserved for a future per-execution timeout.
     /// </summary>
-    public static Flow<T> TimeoutEach<T>(
+    public static Flow<T> IdleTimeout<T>(
         this Flow<T> flow,
         TimeSpan timeout,
         TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(flow);
         ValidatePositive(timeout, nameof(timeout));
-        return new Flow<T>(new TimeoutEachFlow<T>(flow.Node, timeout, timeProvider ?? TimeProvider.System));
+        return new Flow<T>(new IdleTimeoutFlow<T>(flow.Node, timeout, timeProvider ?? TimeProvider.System));
     }
 
     /// <summary>

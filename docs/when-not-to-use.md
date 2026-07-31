@@ -141,7 +141,8 @@ The inverse list, stated as facts about the semantics, not as marketing:
 - **Per-key conflation for stale-data-replacement workloads** —
   `LatestByKey` processes the freshest value per key instead of every update,
   with the discard rate (`items.replaced`) as a first-class, counted number,
-  not a side effect you have to infer.
+  not a side effect you have to infer, and bounded to an explicit
+  `maximumKeys` rather than growing with key cardinality.
 - **Diagnostics without instrumenting your own code** — `queue.duration` vs.
   `processing.duration`, worker utilization, and drop/replace counts are
   available per stage without adding logging calls to the selector itself.

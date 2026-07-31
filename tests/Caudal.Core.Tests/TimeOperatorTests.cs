@@ -180,7 +180,7 @@ public class TimeOperatorTests
     }
 
     [Fact]
-    public async Task TimeoutEach_faults_when_the_source_goes_silent()
+    public async Task IdleTimeout_faults_when_the_source_goes_silent()
     {
         var time = new FakeTimeProvider();
         var source = Channel.CreateUnbounded<int>();
@@ -188,7 +188,7 @@ public class TimeOperatorTests
 
         var pipeline = source.Reader
             .ToFlow(capacity: 8, name: "quotes")
-            .TimeoutEach(Step, time)
+            .IdleTimeout(Step, time)
             .ForEachAsync((item, _) =>
             {
                 lock (delivered)
@@ -225,13 +225,13 @@ public class TimeOperatorTests
     }
 
     [Fact]
-    public async Task TimeoutEach_lets_a_lively_source_flow_and_complete()
+    public async Task IdleTimeout_lets_a_lively_source_flow_and_complete()
     {
         var time = new FakeTimeProvider();
 
         var results = await Enumerable.Range(0, 100)
             .ToFlow(capacity: 8)
-            .TimeoutEach(Step, time)
+            .IdleTimeout(Step, time)
             .ToListAsync()
             .WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -283,7 +283,7 @@ public class TimeOperatorTests
 
         var pipeline = source.Reader
             .ToFlow(capacity: 8)
-            .BatchEvery(Step, timeProvider: time)
+            .BatchEvery(Step, maximumSize: 100, timeProvider: time)
             .ForEachAsync((batch, _) =>
             {
                 lock (batches)
@@ -360,7 +360,7 @@ public class TimeOperatorTests
     }
 
     [Fact]
-    public async Task TimeoutEach_still_fires_after_a_slow_drain_followed_by_silence()
+    public async Task IdleTimeout_still_fires_after_a_slow_drain_followed_by_silence()
     {
         var time = new FakeTimeProvider();
         var source = Channel.CreateUnbounded<int>();
@@ -370,7 +370,7 @@ public class TimeOperatorTests
 
         var pipeline = source.Reader
             .ToFlow(capacity: 8)
-            .TimeoutEach(Step, time)
+            .IdleTimeout(Step, time)
             .ForEachAsync(async (item, ct) =>
             {
                 firstEntered.TrySetResult();
@@ -423,7 +423,7 @@ public class TimeOperatorTests
     {
         var batches = await Enumerable.Range(0, 2_000)
             .ToFlow(capacity: 64)
-            .BatchEvery(TimeSpan.FromHours(1))
+            .BatchEvery(TimeSpan.FromHours(1), maximumSize: 10_000)
             .ToListAsync()
             .WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -467,7 +467,7 @@ public class TimeOperatorTests
     {
         var flow = Enumerable.Range(0, 10).ToFlow();
 
-        FluentActions.Invoking(() => flow.BatchEvery(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
+        FluentActions.Invoking(() => flow.BatchEvery(TimeSpan.Zero, maximumSize: 10)).Should().Throw<ArgumentOutOfRangeException>();
         FluentActions.Invoking(() => flow.BatchEvery(TimeSpan.FromSeconds(1), maximumSize: 0))
             .Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -497,7 +497,7 @@ public class TimeOperatorTests
         FluentActions.Invoking(() => flow.Debounce(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
         FluentActions.Invoking(() => flow.Throttle(TimeSpan.FromSeconds(-1))).Should().Throw<ArgumentOutOfRangeException>();
         FluentActions.Invoking(() => flow.Sample(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
-        FluentActions.Invoking(() => flow.TimeoutEach(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
+        FluentActions.Invoking(() => flow.IdleTimeout(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
         FluentActions.Invoking(() => flow.DelayEach(TimeSpan.Zero)).Should().Throw<ArgumentOutOfRangeException>();
     }
 

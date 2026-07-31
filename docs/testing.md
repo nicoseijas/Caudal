@@ -114,7 +114,7 @@ var result = await worker; // 42
 
 ## Virtual time
 
-Time-based operators (`Debounce`, `Throttle`, `Sample`, `TimeoutEach`,
+Time-based operators (`Debounce`, `Throttle`, `Sample`, `IdleTimeout`,
 `BatchEvery`, `DelayEach`) already take a `TimeProvider`, so `Caudal.Testing`
 does not need to introduce its own clock abstraction — it relies on
 `Microsoft.Extensions.Time.Testing.FakeTimeProvider`, referenced transitively

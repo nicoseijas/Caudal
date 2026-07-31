@@ -77,12 +77,17 @@ regardless of how fast the source produces.
 | `Sample` | on a fixed cadence | all but the latest per tick |
 | `LatestByKey` | as fast as downstream can take, per key | all but the latest per key |
 
-## BatchEvery(interval)
+## BatchEvery(interval, maximumSize)
 
-Sugar over `Batch(maximumSize: unbounded, maximumDelay: interval)`: one batch
-emission per interval containing everything received while the batch was open.
-The window is anchored at the batch's **first item**, not aligned to wall-clock
+Sugar over `Batch(maximumSize, maximumDelay: interval)`: one batch emission per
+interval containing everything received while the batch was open. The window
+is anchored at the batch's **first item**, not aligned to wall-clock
 boundaries, and an empty window emits nothing.
+
+`maximumSize` is a required argument, not an optional one with an unbounded
+default: no buffer in Caudal is allowed to grow without limit, so a batch that
+never closes on time (a stalled downstream, a clock that never ticks) must
+still have a hard cap on how much it accumulates.
 
 ```text
 interval = 4
@@ -90,10 +95,15 @@ Input:     A-B-C---D-E------|
 Output:    ----[ABC]----[DE]|
 ```
 
-## TimeoutEach(timeout)
+## IdleTimeout(timeout)
 
 Bounds the **silence between consecutive items**: if no item arrives within
 `timeout`, the pipeline faults with `TimeoutException`.
+
+This operator was renamed from `TimeoutEach`: the old name suggested it bounded
+each item's processing time, but it has only ever measured the gap between
+upstream arrivals. `TimeoutEach` is reserved for a future operator that times
+individual executions via a `Caudal.Resilience` strategy.
 
 ```text
 timeout = 5

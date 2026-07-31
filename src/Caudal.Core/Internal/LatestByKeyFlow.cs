@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -8,14 +9,18 @@ namespace Caudal.Internal;
 /// pending item for its key instead of queueing behind it, so a slow consumer sees
 /// the latest value per key rather than a growing backlog. This is the one stage
 /// that intentionally absorbs upstream pressure — replacement, not waiting, is its
-/// contract. Memory is bounded by the number of distinct keys, and every
-/// replacement is counted.
+/// contract. Memory is bounded by <c>maximumKeys</c> distinct pending keys, and
+/// every replacement is counted. A new key arriving once that bound is reached
+/// faults the pipeline with <see cref="FlowKeyCapacityException"/> instead of
+/// growing without limit.
 /// </summary>
 internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
     where TKey : notnull
 {
     private readonly FlowBase<T> _upstream;
     private readonly Func<T, TKey> _keySelector;
+    private readonly int _maximumKeys;
+    private readonly KeyOverflowMode _overflowMode;
     private readonly IEqualityComparer<TKey> _comparer;
     private long _replaced;
     private int _pendingCount;
@@ -23,11 +28,15 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
     internal LatestByKeyFlow(
         FlowBase<T> upstream,
         Func<T, TKey> keySelector,
+        int maximumKeys,
+        KeyOverflowMode overflowMode,
         IEqualityComparer<TKey>? comparer)
         : base(upstream, "LatestByKey", upstream.Options)
     {
         _upstream = upstream;
         _keySelector = keySelector;
+        _maximumKeys = maximumKeys;
+        _overflowMode = overflowMode;
         _comparer = comparer ?? EqualityComparer<TKey>.Default;
     }
 
@@ -41,8 +50,11 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
 
         // Invariant: a key is in this channel if and only if it has an entry in
         // `pending`, so the channel holds each key at most once and its effective
-        // bound is the number of distinct keys.
-        var readyKeys = Channel.CreateUnbounded<TKey>(new UnboundedChannelOptions
+        // bound is the number of distinct keys. That bound is now structural, not
+        // just documented: the channel's capacity is `_maximumKeys`, and the pump
+        // below refuses a new key past that limit while holding `stateLock`, so
+        // `writer.TryWrite` below can never fail for lack of capacity.
+        var readyKeys = Channel.CreateBounded<TKey>(new BoundedChannelOptions(_maximumKeys)
         {
             SingleWriter = true,
             SingleReader = true,
@@ -52,6 +64,7 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
 
         if (Stats is { } stats)
         {
+            stats.QueueCapacity = _maximumKeys;
             stats.QueueLengthProbe = () => Volatile.Read(ref _pendingCount);
         }
 
@@ -103,6 +116,16 @@ internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
                     }
                     else
                     {
+                        if (pending.Count >= _maximumKeys)
+                        {
+                            // Reject is the only overflow policy today; _overflowMode is
+                            // stored so a future policy (e.g. evicting the oldest key) has
+                            // somewhere to branch without changing the stage's shape.
+                            Debug.Assert(_overflowMode == KeyOverflowMode.Reject, "Reject is the only supported KeyOverflowMode.");
+                            throw new FlowKeyCapacityException(
+                                $"LatestByKey is tracking {_maximumKeys} pending keys and received a new one. Raise maximumKeys, reduce key cardinality, or drain faster.");
+                        }
+
                         pending[key] = item;
                         Interlocked.Increment(ref _pendingCount);
                         writer.TryWrite(key);

@@ -8,7 +8,7 @@ namespace Caudal.Core.Tests;
 
 /// <summary>
 /// TimerRace is the shared primitive behind Debounce, Sample, Batch, and
-/// TimeoutEach; its contract is pinned down here directly, not only through them.
+/// IdleTimeout; its contract is pinned down here directly, not only through them.
 /// </summary>
 public class TimerRaceTests
 {
