@@ -19,7 +19,7 @@ Caudal is a .NET library for building bounded, cancellable, observable async pip
 3. **Correct cancellation and shutdown** — no orphaned tasks, no swallowed exceptions.
 4. **Operational diagnostics** — you can explain a slow pipeline without adding logs to your own code.
 
-> **Status: pre-release.** The full 0.1–0.3 API surface from the roadmap is implemented and tested (146 tests, all packages build warning-clean), but nothing is published to NuGet yet and the contracts in [`docs/SEMANTICS.md`](docs/SEMANTICS.md) stay open to change until `1.0`. The build order and exit criteria are in [`ROADMAP.md`](ROADMAP.md).
+> **Status: pre-release.** The full 0.1–0.3 API surface from the roadmap is implemented and tested (151 tests, all packages build warning-clean) and preview packages are on NuGet. The contracts in [`docs/SEMANTICS.md`](docs/SEMANTICS.md) stay open to change until `1.0` — preview releases break deliberately when a contract needs fixing. The build order and exit criteria are in [`ROADMAP.md`](ROADMAP.md).
 
 ## What it looks like
 
