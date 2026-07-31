@@ -5,6 +5,11 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://github.com/nicoseijas/Caudal/actions/workflows/ci.yml"><img src="https://github.com/nicoseijas/Caudal/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
 > *Caudal* (Spanish): the volume of water flowing through a channel per unit of time.
 
 Caudal is a .NET library for building bounded, cancellable, observable async pipelines. It is aimed at the code most services end up writing by hand — a `SemaphoreSlim` to limit concurrency, `Task.WhenAll` to fan out, a `Channel<T>` to connect stages — and at the four problems that code keeps getting wrong:
