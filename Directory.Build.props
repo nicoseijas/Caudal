@@ -16,4 +16,22 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
+    <RepositoryUrl>https://github.com/nicoseijas/Caudal</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/nicoseijas/Caudal</PackageProjectUrl>
+    <PackageTags>async;pipelines;backpressure;channels;dataflow;iasyncenumerable;concurrency</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)docs\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>
