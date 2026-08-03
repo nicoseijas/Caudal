@@ -8,10 +8,18 @@ public static class FlowShapingExtensions
 {
     /// <summary>
     /// Keeps at most one pending item per key: a new arrival replaces the pending
-    /// item for its key instead of queueing behind it. An item already delivered
-    /// downstream is never interrupted; when its processing finishes, the latest
-    /// value received meanwhile is next. This stage intentionally absorbs upstream
-    /// pressure, but it is not unbounded: memory is bounded by
+    /// item for its key instead of queueing behind it.
+    /// <para>
+    /// Conflation ends at emission. Once an item has been handed downstream its key
+    /// stops being tracked, so with anything concurrent or buffered after this stage
+    /// two values for one key can be in processing at the same time. This operator
+    /// thins a feed; it does not serialize work per key. When processing a key twice
+    /// at once is wrong, use
+    /// <see cref="FlowOperatorExtensions.SelectLatestByKeyAsync{TSource, TResult, TKey}(Flow{TSource}, Func{TSource, TKey}, Func{TSource, CancellationToken, Task{TResult}}, int, int, FlowFailureMode, IEqualityComparer{TKey})"/>,
+    /// which owns the selector and can.
+    /// </para>
+    /// This stage intentionally absorbs upstream pressure, but it is not unbounded:
+    /// memory is bounded by
     /// <paramref name="maximumKeys"/> distinct pending keys. Replacements of an
     /// already-pending key are free and counted (never bounded); a NEW key arriving
     /// once <paramref name="maximumKeys"/> distinct keys are already pending faults

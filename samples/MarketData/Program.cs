@@ -1,6 +1,7 @@
 // Pilot A — market data. A producer emits price updates far faster than the
-// pipeline can process them; LatestByKey conflates per symbol so the dashboard
-// always works on fresh prices, and Batch coalesces dashboard updates.
+// pipeline can process them; SelectLatestByKeyAsync conflates per symbol so the
+// dashboard always works on fresh prices — and never computes indicators for one
+// symbol twice at once — while Batch coalesces dashboard updates.
 
 using System.Runtime.CompilerServices;
 using Caudal;
@@ -30,8 +31,11 @@ var flowOptions = new FlowOptions
 // while the pipeline is running.
 var flow = GeneratePriceUpdates(symbols, cts.Token)
     .ToFlow(flowOptions)
-    .LatestByKey(update => update.Symbol, maximumKeys: 128)
-    .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
+    .SelectLatestByKeyAsync(
+        update => update.Symbol,
+        CalculateIndicatorsAsync,
+        concurrency: 8,
+        maximumKeys: 128)
     .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50));
 
 var sinkTask = flow.ForEachAsync(UpdateDashboardAsync, cts.Token);

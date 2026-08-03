@@ -106,6 +106,88 @@ public static class FlowOperatorExtensions
     }
 
     /// <summary>
+    /// Projects each item through an async selector, latest-wins per key: at most one
+    /// invocation runs for a given key at a time, and a value arriving while its key is
+    /// executing replaces any other value waiting for that key instead of queueing
+    /// behind it. When an execution finishes, the latest value received meanwhile is
+    /// the one that runs next. <paramref name="concurrency"/> still bounds how many
+    /// keys execute at once.
+    /// <para>
+    /// This is the serializing form of conflation, and it is deliberately not
+    /// <c>LatestByKey().SelectAsync()</c>: a standalone <c>LatestByKey</c> conflates
+    /// only until it emits, so with any concurrency or buffering downstream two values
+    /// for one key can be processed at the same time. Use that one to thin a feed, and
+    /// this one when processing a key twice at once is wrong.
+    /// </para>
+    /// <para>
+    /// Memory is bounded by <paramref name="maximumKeys"/> tracked keys — executing or
+    /// waiting. Replacements are free and counted (<c>inputs.replaced</c>); a genuinely
+    /// new key arriving once that many keys are tracked faults the pipeline with
+    /// <see cref="FlowKeyCapacityException"/>. Results are delivered in completion
+    /// order across keys, and in execution order within one key.
+    /// </para>
+    /// </summary>
+    public static Flow<TResult> SelectLatestByKeyAsync<TSource, TResult, TKey>(
+        this Flow<TSource> flow,
+        Func<TSource, TKey> keySelector,
+        Func<TSource, CancellationToken, Task<TResult>> selector,
+        int concurrency,
+        int maximumKeys,
+        FlowFailureMode failureMode = FlowFailureMode.Stop,
+        IEqualityComparer<TKey>? comparer = null)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(flow);
+        ArgumentNullException.ThrowIfNull(keySelector);
+        ArgumentNullException.ThrowIfNull(selector);
+        if (concurrency < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(concurrency), concurrency, "Concurrency must be at least 1.");
+        }
+
+        if (maximumKeys < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumKeys), maximumKeys, "Maximum keys must be at least 1.");
+        }
+
+        if (!Enum.IsDefined(failureMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(failureMode), failureMode, "Unknown failure mode.");
+        }
+
+        if (failureMode == FlowFailureMode.Capture)
+        {
+            throw new ArgumentException(
+                "Capture changes the result type to FlowResult<T>, which this operator does not express; use Stop or Skip.",
+                nameof(failureMode));
+        }
+
+        return new Flow<TResult>(new SelectLatestByKeyFlow<TSource, TResult, TKey>(
+            flow.Node,
+            keySelector,
+            FailurePolicy.Wrap(selector, failureMode),
+            concurrency,
+            maximumKeys,
+            comparer));
+    }
+
+    /// <summary>Projects each item latest-wins per key with a selector that does not observe cancellation.</summary>
+    public static Flow<TResult> SelectLatestByKeyAsync<TSource, TResult, TKey>(
+        this Flow<TSource> flow,
+        Func<TSource, TKey> keySelector,
+        Func<TSource, Task<TResult>> selector,
+        int concurrency,
+        int maximumKeys,
+        FlowFailureMode failureMode = FlowFailureMode.Stop,
+        IEqualityComparer<TKey>? comparer = null)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        return flow.SelectLatestByKeyAsync(
+            keySelector, (item, _) => selector(item), concurrency, maximumKeys, failureMode, comparer);
+    }
+
+    /// <summary>
     /// Filters items through an async predicate with bounded concurrency. Items that
     /// pass are delivered in source order relative to each other. With
     /// <see cref="FlowFailureMode.Skip"/>, an item whose predicate throws is dropped;

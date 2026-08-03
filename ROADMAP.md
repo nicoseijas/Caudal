@@ -113,7 +113,9 @@ priceUpdates
     .SelectAsync(CalculateIndicators, concurrency: 8);
 ```
 
-Semantics: at most one pending item per key; a new item replaces the pending one; an executing item is not interrupted; when it finishes, the latest value received during its execution is processed next. The operator reports how many items were replaced.
+Semantics: at most one pending item per key; a new item replaces the pending one. The operator reports how many items were replaced.
+
+This shipped as **two** operators, because one of them could not keep the contract originally written here. `LatestByKey` conflates until it *emits*: it is a separate stage from the selector, so it cannot know whether the previous value for a key is still being processed, and with a concurrent stage after it two values for one key can run at once. `SelectLatestByKeyAsync` owns the selector, which is what lets it guarantee "an executing item is not interrupted; when it finishes, the latest value received during its execution is processed next" — see [`docs/SEMANTICS.md`](docs/SEMANTICS.md).
 
 ### 3.2 `Batch`
 
@@ -286,7 +288,7 @@ Caudal/
 
 | Version | API |
 |---|---|
-| `0.1` | `ToFlow`, `SelectAsync`, `WhereAsync`, `SelectManyAsync`, `ForEachAsync`, `ToListAsync`, `Buffer`, `Batch`, `Merge`, `LatestByKey` |
+| `0.1` | `ToFlow`, `SelectAsync`, `WhereAsync`, `SelectManyAsync`, `SelectLatestByKeyAsync`, `ForEachAsync`, `ToListAsync`, `Buffer`, `Batch`, `Merge`, `LatestByKey` |
 | `0.2` | `Debounce`, `Throttle`, `Sample`, `IdleTimeout`, `RateLimit`, `RateLimitBy`, `WithResiliencePipeline` |
 | `0.3` | OpenTelemetry, snapshots, testing utilities, stress testing |
 

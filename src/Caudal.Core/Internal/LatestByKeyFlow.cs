@@ -13,6 +13,11 @@ namespace Caudal.Internal;
 /// every replacement is counted. A new key arriving once that bound is reached
 /// faults the pipeline with <see cref="FlowKeyCapacityException"/> instead of
 /// growing without limit.
+///
+/// The conflation window ends at emission: the key leaves <c>pending</c> when this
+/// stage yields its value, not when a downstream consumer finishes with it. A stage
+/// separate from the selector cannot know the latter, which is what
+/// <see cref="SelectLatestByKeyFlow{TSource, TResult, TKey}"/> exists to provide.
 /// </summary>
 internal sealed class LatestByKeyFlow<T, TKey> : FlowBase<T>
     where TKey : notnull

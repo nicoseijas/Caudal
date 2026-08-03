@@ -102,7 +102,7 @@ stage against its own contract.
 |---|---|
 | A stage's `queued` is pinned at `QueueCapacity`, and the **next** stage's `active` is pinned at its configured concurrency with a high `AverageProcessingTime` | That next stage is the bottleneck. Its workers are all busy for a long time each, so nothing drains the queue in front of it. Raise its concurrency or speed up the selector. |
 | A stage's `queued` is at capacity, but its own `active` (or the next stage's) is low | Workers are starved somewhere downstream — the backpressure is coming from further down the chain, not from this stage. Keep walking toward the sink. |
-| `InputsReceived` is far greater than `OutputsEmitted` on `LatestByKey`, `Sample`, or `Debounce` | Healthy conflation, not loss. These operators are designed to shed stale items; check `InputsReplaced` — it should roughly account for the gap. If `InputsReplaced + OutputsEmitted` still falls short of `InputsReceived`, something else is wrong, but the gap by itself is the intended behavior. |
+| `InputsReceived` is far greater than `OutputsEmitted` on `LatestByKey`, `SelectLatestByKeyAsync`, `Sample`, or `Debounce` | Healthy conflation, not loss. These operators are designed to shed stale items; check `InputsReplaced` — it should roughly account for the gap. If `InputsReplaced + OutputsEmitted` still falls short of `InputsReceived`, something else is wrong, but the gap by itself is the intended behavior. |
 | `InputsFailed` is growing on a stage running under `FlowFailureMode.Skip` | The failure policy is quietly eating errors that would otherwise have stopped the pipeline. `Skip` is doing its job, but a rising `InputsFailed` counter means it's worth looking at *why* — check the exceptions being skipped, don't just watch the counter. |
 | `InputsFiltered` is high on a `WhereAsync`/`Where` stage | Expected — the predicate is rejecting most inputs. This is not a failure and not a loss; it is the operator doing its job. |
 | The source stage's `InputsReceived` is flat (barely increasing between two snapshots) | The source itself is the bottleneck — it isn't producing items fast enough to saturate anything downstream. Look at what's upstream of the flow, not inside it. |
@@ -146,7 +146,7 @@ cost of publishing metrics is paid once per scrape, not once per interval.
 | `caudal.outputs.emitted` | counter | values a stage actually handed downstream (not necessarily item-for-item — see below) |
 | `caudal.inputs.failed` | counter | inputs that failed under `Skip`/`Capture` |
 | `caudal.inputs.dropped` | counter | inputs shed by a `Buffer` drop policy |
-| `caudal.inputs.replaced` | counter | inputs superseded by conflation (`LatestByKey`, `Sample`, `Debounce`) |
+| `caudal.inputs.replaced` | counter | inputs superseded by conflation (`LatestByKey`, `SelectLatestByKeyAsync`, `Sample`, `Debounce`) |
 | `caudal.inputs.filtered` | counter | inputs a predicate rejected (`WhereAsync`) — a filter miss, not a failure |
 | `caudal.queue.length` | gauge | items currently buffered at a stage |
 | `caudal.queue.capacity` | gauge | the stage's configured buffer capacity |

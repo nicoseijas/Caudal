@@ -75,7 +75,8 @@ regardless of how fast the source produces.
 |---|---|---|
 | `Debounce` | after silence | all but the last of a burst |
 | `Sample` | on a fixed cadence | all but the latest per tick |
-| `LatestByKey` | as fast as downstream can take, per key | all but the latest per key |
+| `LatestByKey` | as fast as downstream can take, per key | all but the latest per key, until emission |
+| `SelectLatestByKeyAsync` | when the key's previous execution ends | all but the latest per key, until execution |
 
 ## BatchEvery(interval, maximumSize)
 

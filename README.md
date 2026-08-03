@@ -36,16 +36,26 @@ await source
 
 Pipelines are built on `IAsyncEnumerable<T>` at the edges and `Channel<T>` internally. `Channel<T>` is an implementation detail and is not part of the public API.
 
-The operator that best shows why Caudal exists is `LatestByKey`, for real-time feeds where stale items should be replaced rather than queued:
+The operator that best shows why Caudal exists is `SelectLatestByKeyAsync`, for
+real-time feeds where stale items should be replaced rather than queued:
 
 ```csharp
 priceUpdates
     .ToFlow(capacity: 1_024)
-    .LatestByKey(x => x.Symbol, maximumKeys: 1_000)  // at most one pending item per key, bounded to 1,000 keys; newer replaces older
-    .SelectAsync(CalculateIndicatorsAsync, concurrency: 8)
+    .SelectLatestByKeyAsync(
+        x => x.Symbol,
+        CalculateIndicatorsAsync,
+        concurrency: 8,          // at most 8 symbols computed at once...
+        maximumKeys: 1_000)      // ...never the same symbol twice; newer replaces older, bounded to 1,000 symbols
     .Batch(maximumSize: 100, maximumDelay: TimeSpan.FromMilliseconds(50))
     .ForEachAsync(UpdateDashboardAsync, ct);
 ```
+
+There is also a plain `LatestByKey` that only thins the stream. The difference is
+worth knowing before choosing: it conflates a key until it *emits* a value, so with a
+concurrent stage after it, two updates for one symbol can be computed at the same
+time. `SelectLatestByKeyAsync` owns the selector, which is what lets it guarantee one
+execution per key at a time and run the freshest value received meanwhile next.
 
 ## Design principles
 

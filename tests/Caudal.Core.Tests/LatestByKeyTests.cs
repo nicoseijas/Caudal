@@ -54,6 +54,53 @@ public class LatestByKeyTests
     }
 
     [Fact]
+    public async Task Conflation_ends_at_emission_and_does_not_serialize_downstream_processing()
+    {
+        // The boundary of this operator's contract, pinned deliberately. LatestByKey
+        // conflates a key only while its value is still waiting to be emitted; once
+        // handed downstream, the key is no longer tracked, so a concurrent consumer can
+        // process two values for one key at the same time. When that is wrong, the
+        // operator to use is SelectLatestByKeyAsync, which owns the selector and can
+        // serialize per key. This test passes by not timing out: the second value for A
+        // must start while the first is still executing.
+        var source = Channel.CreateUnbounded<(string Symbol, int Price)>();
+        var firstRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var pipeline = source.Reader
+            .ToFlow(capacity: 16)
+            .LatestByKey(x => x.Symbol, maximumKeys: 8)
+            .SelectAsync(
+                async (x, ct) =>
+                {
+                    if (x.Price == 1)
+                    {
+                        firstRunning.TrySetResult();
+                        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+                    }
+                    else
+                    {
+                        secondRunning.TrySetResult();
+                    }
+
+                    return x.Price;
+                },
+                concurrency: 2)
+            .ConsumeAsync();
+
+        source.Writer.TryWrite(("A", 1));
+        await firstRunning.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        source.Writer.TryWrite(("A", 2));
+
+        await secondRunning.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        source.Writer.Complete();
+        gate.TrySetResult();
+        await pipeline.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public async Task Distinct_keys_are_never_conflated()
     {
         var conflated = Enumerable.Range(0, 500)

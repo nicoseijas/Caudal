@@ -155,7 +155,11 @@ By terminal cause:
 - **Failure (`Stop`)** — in-flight items are cancelled via their token; their results are discarded. Buffered, not-yet-started items are abandoned.
 - **Cancellation** — same as failure: cancel in-flight work, abandon buffered items, terminate.
 
-For `LatestByKey`: an executing item is never interrupted by a newer arrival. The newer item replaces the *pending* slot for that key; when the current execution finishes, the latest value received during it is processed next. Replacing an already-pending key never counts against the stage's capacity; only a genuinely new key does, and only once `maximumKeys` distinct keys are already pending — at that point the stage faults with `FlowKeyCapacityException` under its only overflow policy, `KeyOverflowMode.Reject`, instead of admitting an unbounded number of keys.
+For `LatestByKey`: **conflation ends at emission, not at completion of processing.** A newer arrival replaces the value still waiting in that key's pending slot; once a value has been handed downstream the key stops being tracked, so a later value for it is emitted as soon as the consumer asks for one. With anything concurrent or buffered downstream — including `SelectAsync` with `concurrency: 1`, whose intake runs ahead of its worker — that means two values for one key can be in processing at the same time. `LatestByKey` thins a feed; it does not serialize work per key.
+
+For `SelectLatestByKeyAsync`: **the serializing form.** Because that stage owns the selector, it can guarantee what a standalone `LatestByKey` cannot: at most one execution per key at a time, at most one replaceable value waiting behind it, and — when an execution finishes — the latest value received while it ran is what executes next. `concurrency` still bounds how many *distinct* keys execute at once. Within one key, results are delivered in execution order.
+
+For both: replacing a value that is already waiting never counts against the stage's capacity; only a genuinely new key does, and only once `maximumKeys` keys are already tracked — at that point the stage faults with `FlowKeyCapacityException` under its only overflow policy, `KeyOverflowMode.Reject`, instead of admitting an unbounded number of keys. The two count keys at slightly different scopes: `LatestByKey` bounds keys with a value *pending*, `SelectLatestByKeyAsync` bounds keys *tracked* — executing, waiting, or both.
 
 ---
 
@@ -181,4 +185,5 @@ These decisions bind Phase 4 (time operators) and Phase 5 (resilience):
 | `Batch` | Holds the forming batch; upstream backpressure applies | None; final partial batch always emitted |
 | `Merge` | Backpressure propagates to every source | None |
 | `LatestByKey` | Replaces the pending item per key; a new key past `maximumKeys` faults the pipeline | Counted as `inputs.replaced` |
+| `SelectLatestByKeyAsync` | Replaces the value waiting behind an executing key; a new key past `maximumKeys` faults the pipeline | Counted as `inputs.replaced` |
 | `ForEachAsync` / `ToListAsync` / `ConsumeAsync` | N/A (terminal) | None |
